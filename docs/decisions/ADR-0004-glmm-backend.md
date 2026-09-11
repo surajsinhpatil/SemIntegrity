@@ -1,6 +1,8 @@
 # ADR-0004 — Beta-binomial mixed model backend
 
-**Status:** PROPOSED — blocked on Q4 (formula) and Q8 (tooling)
+**Kind:** METHODOLOGY
+
+**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL (also blocked on Q8 tooling)
 **Date:** 2026-09-11
 
 ## Context

@@ -385,3 +385,68 @@ Also unknown until `scripts/cluster/probe_cluster.sh` runs: partition names, GPU
 models and counts, CUDA/driver versions, module system, storage quota, whether
 the login node has internet (needed to cache Wikidata and weights), and whether
 R is available (Q8).
+
+---
+
+## Q21 — `polarity` sits inside the formal representation *and* is a meaning-preserving factor
+**BLOCKING — Phase 5** · `CONFLICT` · **METHODOLOGY — AWAITING APPROVAL**
+
+§4.4.1 defines semantic equivalence as identity of the formal representation and
+lists ten fields, one of which is `polarity`. §4.4.2 simultaneously makes
+polarity a *meaning-preserving transformation factor*, balanced across classes.
+
+Read literally, both cannot hold: an affirmative probe and its negated
+counterpart would have different representations, therefore not be equivalent,
+therefore not be paraphrases of one another — which empties the polarity factor
+of its purpose and would make 4 of every 8 probes ineligible for the pairwise
+comparison that PSCR counts.
+
+**Proposed resolution (implemented behind one switch, not decided).**
+`logical_form` is polarity-normalised, so an affirmative and a negated probe of
+the same question share one `logical_form`, and the equivalence key is:
+
+```python
+EQUIVALENCE_KEY_FIELDS = ("logical_form", "subject", "predicate",
+                          "object", "time_scope", "quantifier")
+```
+
+`polarity` is recorded on every probe and governs the Stage 0 mapping instead —
+exactly as §4.7 already handles directionality, where "Is A the X of B?" (yes/no)
+and "What is the X of B?" (entity) reach a common canonical space. A negated
+probe's `YES` and an affirmative probe's `NO` map to the same canonical answer.
+
+**This is a single tuple in `src/semintegrity/schemas/probe.py`.** Changing it
+changes what the study treats as "the same question asked differently", so it
+needs your decision, not mine.
+
+**Alternative:** keep polarity in the equivalence key and treat affirmative and
+negated probes as two separate paraphrase sets per constraint, comparing within
+but never across. That halves the pairs per constraint from 28 to 12 and removes
+the negation-sensitivity finding §5.5 promises.
+
+---
+
+## Q22 — D0's reference implementation is set-level; PSCR is pairwise
+**SIGNIFICANT — Phase 7** · `AMBIGUITY` · **METHODOLOGY — AWAITING APPROVAL**
+
+§4.8.2's worked example iterates over responses and checks each against the
+knowledge base, returning a single `VIOLATION`/`SATISFIED` for the constraint.
+§4.10 defines the primary endpoint PSCR as *contradictory probe pairs ÷ evaluable
+probe pairs*. §4.8.1 then routes "the primary profile" through D0 wherever D0
+applies. The unit does not match.
+
+**Implemented (both, so the decision does not have to precede the data):**
+
+* `check_pair(constraint, a, b, kb)` — whether two canonicalised responses are
+  jointly satisfiable. **This is what feeds PSCR.**
+* `check_set(constraint, responses, kb)` — the §4.8.2 reading, defaulting to
+  "SATISFIED unless some pair contradicts", reported as the integrity view.
+
+Both verdicts are computed and stored for every constraint × model.
+
+**Decision needed:** which one the paper reports as "D0", and whether the
+set-level verdict appears as a separate integrity statistic. My recommendation:
+`check_pair` is D0 for all detector-comparison and PSCR purposes (it is the only
+one commensurable with D1/D2/D3, which are all pairwise), and the set-level
+verdict is reported alongside D0 coverage as a descriptive integrity measure.
+

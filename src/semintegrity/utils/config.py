@@ -127,3 +127,43 @@ def unresolved_decisions(cfg: dict[str, Any], _prefix: str = "") -> list[str]:
         ):
             found.append(f"{path} = {value}")
     return found
+
+
+#: Keys every resolved model config must carry after merging with the defaults.
+REQUIRED_MODEL_KEYS = frozenset(
+    {
+        "model_id",
+        "short_name",
+        "family",
+        "dtype",
+        "quantisation",
+        "revision",
+        "generation",
+        "serving",
+        "gated_on_hf",
+        "supports_system_role",
+    }
+)
+
+
+def resolve_model_config(short_name: str) -> ConfigSnapshot:
+    """Model config merged over the shared defaults, with required keys checked.
+
+    Fails loudly on a missing key: a model silently defaulting to fp16, or to an
+    unpinned revision nobody noticed, would be a confound rather than a crash.
+    """
+    snap = model_config(short_name)
+    missing = REQUIRED_MODEL_KEYS - set(snap.data)
+    if missing:
+        raise KeyError(
+            f"model config {short_name!r} is missing required key(s) {sorted(missing)}; "
+            "check configs/models/_defaults.yaml and the per-model file"
+        )
+    if snap.data["dtype"] != "bfloat16" or snap.data["quantisation"] != "none":
+        raise ValueError(
+            f"{short_name}: §4.6 requires bf16 with no quantisation for every evaluated "
+            f"model (got dtype={snap.data['dtype']!r}, quantisation={snap.data['quantisation']!r}). "
+            "The documented fallback applies quantisation only to the 70B ceiling model, "
+            "and that path is configured explicitly, never by a per-model default."
+        )
+    return snap

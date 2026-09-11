@@ -1,8 +1,8 @@
 # PROJECT_STATUS
 
 **Project:** SemIntegrity — Measuring Semantic Self-Inconsistency in LLMs Across Structured Integrity Constraints
-**Last updated:** 2026-09-11 (session 1)
-**Current phase:** Phase −1 (infrastructure) / Phase 0 (literature) — *scaffold complete; 4 blockers cleared; awaiting cluster probe*
+**Last updated:** 2026-09-11 (session 2)
+**Current phase:** Phase 1 (representation infrastructure) — *infrastructure complete and tested; pilot constraint CONTENT not yet authored*
 
 > This file is the live state of the project. It is updated at the end of every
 > working session. Nothing is marked complete that has not actually been done
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | −1 | Infrastructure reconnaissance | **NOT STARTED** — needs cluster access | env test + smoke job pass |
 | 0 | Literature verification | **NOT STARTED** | every citation VERIFIED |
-| 1 | Constraint representation + 12 pilot constraints | **NOT STARTED** | predicates execute; ground truth resolves |
+| 1 | Constraint representation + 12 pilot constraints | **INFRASTRUCTURE DONE** · content pending | predicates execute; ground truth resolves |
 | 2 | Pipeline implementation | **NOT STARTED** | pipeline runs end to end |
 | 3 | Pilot (12×5×3) | **NOT STARTED** | go/no-go criteria |
 | 4 | Preregistration preparation | **NOT STARTED** | **researcher submits to OSF** |
@@ -51,19 +51,56 @@
   cells · researcher-runs-cluster-commands. Unresolved markers: 19 → 16, of
   which 14 are answered by the cluster probe.
 
+
+### Session 2 — 2026-09-11 · Phase 1 infrastructure
+
+Built and tested the constraint-representation layer. **No pilot constraint
+content was authored or frozen** — that is presented for approval first, as
+instructed.
+
+| Component | Module | Tests |
+|---|---|---|
+| Controlled vocabularies | `schemas/enums.py` | ordering on `ConstraintClass` is **disabled in code** |
+| Constraint record (17 proposal fields + derived) | `schemas/constraint.py` | cross-field validation, C4 temporal requirement |
+| Probe record (10 formal + 4 surface factors) | `schemas/probe.py` | equivalence key, cloze blanks, factor cells |
+| Response + 22-field provenance | `schemas/response.py` | every field required, raw responses frozen |
+| Benchmark design validator | `benchmark/design_validator.py` | 10 rules, all localised to offending ids |
+| Benchmark loader + freeze | `benchmark/loader.py` | content hash, drift detection, write refusal |
+| Wikidata client | `kb/wikidata.py` | resolves fully offline from the snapshot |
+| Frozen KB cache | `kb/cache.py` | tamper/loss/untracked detection, archive-on-refresh |
+| KB adapters | `kb/adapter.py` | `WikidataKB` records every fact used |
+| D0 predicate framework | `detectors/d0/base.py` | pair-level + set-level verdicts |
+| D0 registry + freeze policy | `detectors/d0/registry.py` | modification after freeze raises |
+| Three-instance audit harness | `detectors/d0/audit.py` | human verdicts required, never generated |
+| Reference predicates (C1, C4) | `detectors/d0/predicates/` | schema-general, carry no facts |
+| Probe factor generator | `probes/factor_design.py` | exact balance verified at both levels |
+
+**Verified:** `pytest -q` → **173 passed** · `ruff check` → **all checks passed**
+· coverage **90%** · `validate_configs.py` → 34 configs parse, 16 markers pending.
+
+**Bugs the tests caught and fixed:**
+* `kruskal` raised on perfectly matched sitelinks — the *ideal* outcome was an error.
+* `@register` bound to a global registry, so discovery was untestable and no-opped on re-import.
+* `_defaults.yaml` nested keys under `defaults:`, so no model actually inherited `dtype: bfloat16`.
+* `_schema_balance` carried dead code and an O(n²) scan.
+
+**Deliverable:** `docs/HUMAN_EFFORT_BUDGET.md` — exact breakdown, **5,721 judgements**
+(corrects the earlier ~4,500 undercount), ≈125 hours, ≈31 of them the second annotator's.
+
 ---
 
 ## Pending — immediate next steps
 
 | # | Task | Blocked by |
 |---|---|---|
-| 1 | Run `scripts/cluster/probe_cluster.sh` on the login node | **researcher** — unblocks 14 of 16 remaining markers |
-| 2 | Accept HF licences (Llama-3.1/3.3, Gemma-2, Mistral-v0.3); create a read token | **HUMAN-ONLY** (Q14) |
-| 3 | Phase 0 literature sweep — verify all 12 citations | *in progress, unblocked* |
-| 4 | Phase 1 — schemas, Wikidata client, D0 framework | *unblocked, starting* |
-| 5 | Identify the second annotator | **researcher** (Q9) |
-| 6 | Fix the numeric IAA threshold | **researcher** (Q11), needed by Phase 4 |
-| 7 | Freeze the D4 distribution mapping | proposal in Q5; decide at Phase 4 |
+| 1 | **Approve Q21** — polarity inside vs outside the equivalence key | **researcher** — blocks probe authoring |
+| 2 | **Approve Q22** — which D0 verdict is "D0" in the paper | **researcher** — both implemented |
+| 3 | Approve pending methodology ADRs 0002, 0003, 0004, 0006 | **researcher** |
+| 4 | Run `scripts/cluster/probe_cluster.sh` | **researcher** — unblocks 14 of 16 markers |
+| 5 | Accept HF licences; create a read token | **HUMAN-ONLY** (Q14) |
+| 6 | Draft 12 pilot constraints → **present for approval before freezing** | me, then researcher |
+| 7 | Phase 0 literature sweep | *unblocked* |
+| 8 | Identify the second annotator (~31 h commitment) | **researcher** (Q9) |
 
 ## Blockers
 
@@ -98,7 +135,12 @@ Full detail for every item: [`docs/OPEN_QUESTIONS.md`](docs/OPEN_QUESTIONS.md).
 | 0007 | Separate 24-constraint development set, disjoint from the 120 | **ACCEPTED** |
 | 0008 | Open-weight D3 judge: Phi-4 primary, OLMo-2 cross-check | **ACCEPTED** |
 | 0009 | Disaggregated binomial cells for probe-factor covariates | **ACCEPTED** — preregistered deviation |
-| 0010 | Researcher runs all cluster commands; no SSH driven from here | **ACCEPTED** |
+| 0010 | Researcher runs all cluster commands; no SSH driven from here | **ACCEPTED** (engineering) |
+| 0011 | Frozen, content-addressed knowledge-base cache | **ACCEPTED** (engineering) |
+
+Methodology ADRs 0002, 0003, 0004 and 0006 are **PROPOSED — AWAITING RESEARCHER
+APPROVAL**. Code depending on them is written behind a single named switch so the
+decision can still go either way (see `EQUIVALENCE_KEY_FIELDS` for the pattern).
 
 ## Human-only tasks (never automated, never simulated)
 
@@ -127,3 +169,5 @@ Claims made in this repository that are **not yet** backed by a real artefact:
 | Literature verification | **not started** — no citation is asserted as verified |
 | Any experimental result | **none exist** |
 | Any human annotation | **none exist** |
+| Pilot constraint content | **not authored** — infrastructure only; content goes to the researcher for approval before it is treated as benchmark data |
+| Synthetic test fixtures | factually invented, confined to `tests/`, and `test_no_synthetic_leak.py` asserts they never reach `data/` or `results/` |

@@ -1,5 +1,7 @@
 # ADR-0010 — Cluster interaction model
 
+**Kind:** ENGINEERING
+
 **Status:** ACCEPTED (researcher, 2026-09-11)
 **Date:** 2026-09-11
 

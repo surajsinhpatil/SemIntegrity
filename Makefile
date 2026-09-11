@@ -23,9 +23,12 @@ typecheck: ## mypy
 	mypy
 
 validate-configs: ## Parse every config and report unresolved decisions
-	$(PY) scripts/validate_configs.py
+	@$(PY) scripts/validate_configs.py; status=$$?; \
+	if [ $$status -eq 1 ]; then echo "config validation FAILED"; exit 1; fi; \
+	if [ $$status -eq 2 ]; then echo "(decisions still pending — informational, not a failure)"; fi
 
-check: validate-configs test ## Everything that must pass before any sbatch
+check: validate-configs lint test ## Everything that must pass before any sbatch
+	@echo "All pre-flight checks passed. Safe to submit Slurm jobs."
 
 probe-cluster: ## Read-only cluster reconnaissance (run on the login node)
 	bash scripts/cluster/probe_cluster.sh

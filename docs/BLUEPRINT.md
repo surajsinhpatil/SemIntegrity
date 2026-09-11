@@ -49,7 +49,7 @@ proposal underdetermines the implementation and a decision is logged in
 | bf16 uniformly, no selective quantisation | `configs/models/_defaults.yaml`; asserted in `tests/unit/test_project_config.py` |
 | Model-specific official chat templates, constant semantic instruction | `src/semintegrity/inference/chat_template.py`; `scripts/models/audit_chat_templates.py` |
 | Log the fully rendered prompt | `src/semintegrity/schemas/response.py` (required field) |
-| 24-field provenance per response | `configs/inference/_provenance.yaml`; schema-enforced at write time |
+| 22-field provenance per response | `configs/inference/_provenance.yaml`; schema-enforced at write time |
 | Empirical determinism check (100 prompts) | `configs/inference/determinism_check.yaml`; `src/semintegrity/inference/determinism.py` |
 | Stochastic subset, variance decomposition | `configs/inference/stochastic.yaml`; `src/semintegrity/analysis/variance_decomposition.py` |
 | Gemma-2 soft-capping preflight | `scripts/models/gemma2_softcap_check.py` — **gates the Gemma-2 arm** |

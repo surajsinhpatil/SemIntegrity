@@ -1,6 +1,8 @@
 # ADR-0002 — The 120-constraint design lattice
 
-**Status:** PROPOSED (awaiting sign-off)
+**Kind:** METHODOLOGY
+
+**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL
 **Date:** 2026-09-11
 
 ## Context

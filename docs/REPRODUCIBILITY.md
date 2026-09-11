@@ -32,7 +32,7 @@ same ids on any machine (`src/semintegrity/utils/ids.py`).
 
 ## Provenance
 
-24 fields are required on every response
+22 provenance fields are required on every response
 (`configs/inference/_provenance.yaml`), including `rendered_prompt`,
 `hf_revision_hash`, `chat_template_hash` and the full software version matrix.
 The schema rejects a response missing any of them at write time, so a gap is

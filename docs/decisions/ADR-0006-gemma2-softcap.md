@@ -1,6 +1,8 @@
 # ADR-0006 — Gemma-2 soft-capping preflight gate
 
-**Status:** PROPOSED (awaiting sign-off) — see Q13
+**Kind:** METHODOLOGY
+
+**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL — see Q13
 **Date:** 2026-09-11
 
 ## Context

@@ -1,6 +1,8 @@
 # ADR-0007 — A separate development set, disjoint from the 120
 
-**Status:** ACCEPTED (researcher, 2026-09-11) · resolves Q1
+**Kind:** METHODOLOGY
+
+**Status:** APPROVED BY RESEARCHER 2026-09-11 · resolves Q1
 **Date:** 2026-09-11
 
 ## Context

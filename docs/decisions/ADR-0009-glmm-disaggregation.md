@@ -1,6 +1,8 @@
 # ADR-0009 — Disaggregated binomial cells for probe-factor covariates
 
-**Status:** ACCEPTED (researcher, 2026-09-11) · resolves Q4
+**Kind:** METHODOLOGY
+
+**Status:** APPROVED BY RESEARCHER 2026-09-11 · resolves Q4
 **Date:** 2026-09-11
 
 ## Context

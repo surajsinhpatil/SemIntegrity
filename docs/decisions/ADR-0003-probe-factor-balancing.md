@@ -1,6 +1,8 @@
 # ADR-0003 — Probe factor balancing at K = 8
 
-**Status:** PROPOSED (awaiting sign-off)
+**Kind:** METHODOLOGY
+
+**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL
 **Date:** 2026-09-11
 
 ## Context

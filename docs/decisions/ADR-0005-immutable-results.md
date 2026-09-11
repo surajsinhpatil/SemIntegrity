@@ -1,5 +1,7 @@
 # ADR-0005 — Immutable results and resume semantics
 
+**Kind:** ENGINEERING
+
 **Status:** ACCEPTED (implemented)
 **Date:** 2026-09-11
 

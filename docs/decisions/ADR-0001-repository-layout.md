@@ -1,6 +1,8 @@
 # ADR-0001 — Repository layout
 
-**Status:** PROPOSED (awaiting sign-off)
+**Kind:** ENGINEERING
+
+**Status:** ACCEPTED (engineering)
 **Date:** 2026-09-11
 
 ## Context

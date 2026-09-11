@@ -63,10 +63,20 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "ARG", "PTH", "RUF"]
-ignore = ["E501"]
+ignore = [
+  "E501",    # line length: enforced by the formatter, not the linter
+  "N818",    # exception naming: `CacheMiss`, `DesignViolation` and
+             # `SchemaAuditFailure` read better than an `...Error` suffix and are
+             # already unambiguous; the proposal's own vocabulary is preferred.
+  "RUF002",  # en-dashes in prose docstrings are intentional
+]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ARG", "N802"]
+"tests/**" = ["ARG", "N802", "C408"]
+# Predicates must accept `kb` whether or not they use it: it is the D0 interface.
+"src/semintegrity/detectors/d0/predicates/*.py" = ["ARG002"]
+# `_no_order` must match the comparison-operator signature it replaces.
+"src/semintegrity/schemas/enums.py" = ["ARG002"]
 
 [tool.mypy]
 python_version = "3.10"

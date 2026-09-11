@@ -1,6 +1,8 @@
 # ADR-0008 — Open-weight D3 judge
 
-**Status:** ACCEPTED (researcher, 2026-09-11) · resolves Q3
+**Kind:** METHODOLOGY
+
+**Status:** APPROVED BY RESEARCHER 2026-09-11 · resolves Q3
 **Date:** 2026-09-11
 
 ## Context

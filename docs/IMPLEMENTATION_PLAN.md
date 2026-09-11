@@ -143,7 +143,7 @@ prerequisite for every detector and D1 is meaningless without it:
 
 1. Stage 0 canonicaliser + alias tables + label taxonomy.
 2. Inference runner: vLLM backend, chat-template rendering per model, full
-   24-field provenance, append-only JSONL, resume, timeout→retry→FAILED.
+   22-field provenance, append-only JSONL, resume, timeout→retry→FAILED.
 3. D1 (trivial once Stage 0 exists) → D0 wiring → D2 → D3 → D4.
 4. Annotation interface: a single self-contained local HTML page that loads a
    blinded JSONL batch and writes labels back as JSONL. No server, no accounts,

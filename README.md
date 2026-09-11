@@ -70,11 +70,14 @@ docs/          BLUEPRINT · IMPLEMENTATION_PLAN · OPEN_QUESTIONS · decisions/ 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pytest -q
+make check
 ```
 
-Everything above runs on a laptop or a login node. It installs **no** torch and
-starts **no** model.
+`make check` runs config validation, lint and the unit tests — everything that
+must pass before any `sbatch`. It runs on a laptop or a login node, installs
+**no** torch and starts **no** model.
+
+> If `make` picks the wrong interpreter, pass it explicitly: `PY=$(which python) make check`.
 
 ### On the cluster
 
@@ -97,7 +100,7 @@ job status and `sbatch`. All CPU- and GPU-heavy work goes through Slurm;
 
 * **Content-addressed identifiers** — every constraint, probe, pair, response
   and run id is a pure function of its inputs.
-* **Full provenance** — 24 required fields per response, including the fully
+* **Full provenance** — 22 required fields per response, including the fully
   rendered prompt, model revision, chat-template hash and the whole software
   version matrix.
 * **Immutable raw results** — append-only JSONL with `fsync`; manifests written

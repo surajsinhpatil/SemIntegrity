@@ -1,6 +1,8 @@
 # Provenance logged with EVERY response (proposal §4.6). No field is optional.
+# The proposal's list is exactly 22 fields; the count is asserted in tests.
 # Enforced by src/semintegrity/schemas/response.py — a response missing any
 # field is rejected at write time, not discovered later.
+required_field_count: 22
 required_fields:
   - model_id
   - hf_revision_hash

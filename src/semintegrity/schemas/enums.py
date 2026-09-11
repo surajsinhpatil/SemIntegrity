@@ -1,0 +1,185 @@
+"""Controlled vocabularies.
+
+Every categorical value in the benchmark is an enum, so a typo is a load-time
+error rather than a silently-dropped stratum in the analysis.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+
+class StrEnum(str, Enum):
+    """Serialises as its value; compares equal to the plain string."""
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return str(self.value)
+
+
+class ConstraintClass(StrEnum):
+    """The four structural conditions (proposal §4.2).
+
+    **CATEGORICAL, NOT ORDERED.** §4.2 is explicit: "temporal reasoning is not
+    provably 'more complex' than universal quantification; it is a different
+    structural requirement", and H1 is deliberately stated as a *difference*
+    rather than a monotonic increase.
+
+    Because this enum inherits from ``str``, Python would otherwise give it a
+    free lexicographic ordering, and ``C1 < C4`` would quietly succeed — which
+    is exactly how a categorical factor ends up modelled as an ordinal one. The
+    comparison operators are therefore disabled.
+
+    Ordering for *display* is still easy: sort on ``.value``, which is a plain
+    string (``sorted(c.value for c in classes)``).
+    """
+
+    C1 = "C1"  # Atomic
+    C2 = "C2"  # Conjunctive / relational
+    C3 = "C3"  # Quantified / rule-based
+    C4 = "C4"  # Temporal
+
+    def _no_order(self, other: object) -> bool:
+        raise TypeError(
+            "ConstraintClass is a categorical experimental condition, not an "
+            "ordered scale (proposal §4.2), so comparison is disabled. "
+            "Sort or compare on `.value` if you need a display order, and never "
+            "enter class as an ordinal or continuous model term."
+        )
+
+    __lt__ = _no_order
+    __le__ = _no_order
+    __gt__ = _no_order
+    __ge__ = _no_order
+
+
+class Domain(StrEnum):
+    """Balancing/control variable (§4.3). Supports no inferential claim."""
+
+    GEOGRAPHY = "geography"
+    HISTORY = "history"
+    BIOLOGY = "biology"
+    PUBLIC_OFFICE = "public_office"
+    SCIENCE_TECHNOLOGY = "science_technology"
+
+
+class Split(StrEnum):
+    """Frozen development/test split (ADR-0007)."""
+
+    DEV = "dev"
+    TEST = "test"
+    PILOT = "pilot"  # Phase 3 pilot constraints; absorbed into DEV afterwards
+
+
+class Tier(StrEnum):
+    PRIMARY = "primary"
+    SATURATION = "saturation"
+    STOCHASTIC = "stochastic"
+    TRACK_B = "track_b"
+    KNOWLEDGE_SCREEN = "knowledge_screen"
+    DETERMINISM = "determinism"
+    PILOT = "pilot"
+
+
+class Track(StrEnum):
+    A = "A"  # constrained output
+    B = "B"  # free-form
+
+
+class AnswerType(StrEnum):
+    """What Track A asks the model to return (§4.4.3)."""
+
+    ENTITY = "entity"
+    BOOLEAN = "boolean"
+    DATE = "date"
+
+
+# --- Probe surface factors (§4.4.2) ---------------------------------------
+class Syntax(StrEnum):
+    DECLARATIVE = "declarative"
+    INTERROGATIVE = "interrogative"
+    CLOZE = "cloze"
+
+
+class Polarity(StrEnum):
+    AFFIRMATIVE = "affirmative"
+    NEGATED = "negated"
+
+
+class Register(StrEnum):
+    FORMAL = "formal"
+    COLLOQUIAL = "colloquial"
+
+
+class Directionality(StrEnum):
+    DIRECT = "direct"
+    REVERSE = "reverse"
+
+
+class Quantifier(StrEnum):
+    """Quantifier scope in the formal probe representation (§4.4.1)."""
+
+    NONE = "none"
+    UNIVERSAL = "universal"
+    EXISTENTIAL = "existential"
+
+
+# --- Stage 0 canonicalisation (§4.7) --------------------------------------
+class ResponseLabel(StrEnum):
+    ANSWER = "ANSWER"
+    ABSTAIN = "ABSTAIN"
+    INVALID = "INVALID"
+    AMBIGUOUS = "AMBIGUOUS"
+    FAILED = "FAILED"
+
+
+#: Labels that make a response unusable for pairwise contradiction detection.
+#: A pair is evaluable iff BOTH responses are ANSWER (Q6, pending confirmation
+#: at Phase 4 preregistration).
+NON_EVALUABLE_LABELS = frozenset(
+    {ResponseLabel.ABSTAIN, ResponseLabel.INVALID, ResponseLabel.AMBIGUOUS, ResponseLabel.FAILED}
+)
+
+
+# --- D0 (§4.8.2) -----------------------------------------------------------
+class Verdict(StrEnum):
+    VIOLATION = "VIOLATION"
+    SATISFIED = "SATISFIED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class DetectorId(StrEnum):
+    D0 = "D0"
+    D1 = "D1"
+    D2 = "D2"
+    D3 = "D3"
+    D4 = "D4"
+    HUMAN = "H"
+
+
+# --- Human annotation (§4.9) ----------------------------------------------
+class Relation(StrEnum):
+    COMPATIBLE = "compatible"
+    CONTRADICTORY = "contradictory"
+    UNCLEAR = "unclear"
+
+
+class Correctness(StrEnum):
+    CORRECT = "correct"
+    INCORRECT = "incorrect"
+    UNCLEAR = "unclear"
+
+
+class ResponseStatus(StrEnum):
+    ANSWER = "answer"
+    ABSTAIN = "abstain"
+
+
+class ValidationStatus(StrEnum):
+    """Probe lifecycle through §4.4.5 validation."""
+
+    DRAFT = "draft"
+    AUTO_FILTERED = "auto_filtered"
+    PENDING_HUMAN = "pending_human"
+    VALIDATED = "validated"
+    REWRITTEN = "rewritten"
+    DISCARDED = "discarded"

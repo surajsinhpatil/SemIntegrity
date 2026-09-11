@@ -1,0 +1,33 @@
+# D0 — symbolic constraint reference (proposal §4.8.2)
+# "Deterministic CONDITIONAL verification, not oracular judgement."
+id: D0
+role: "High-confidence automated reference where formally executable"
+degrades_with_class: false
+determinism_conditional_on: [correct_formalisation, correct_canonicalisation, correct_knowledge_base]
+
+error_model:
+  character: systematic_and_schema_correlated     # NOT random
+  consequence: "a faulty predicate is confidently wrong across every instance of its schema"
+
+policy:                                            # §4.8.2, steps 10-13
+  audit:
+    three_instance_schema_audit: true
+    required_before: predicate_freeze
+    recorded_in: data/benchmark/d0_schema_audits.jsonl
+  freeze:
+    when: "before any test-split evaluation"
+    enforcement: "predicate file SHA-256 recorded in results/manifests/d0_freeze.json; CI test fails on drift"
+  dev_split:  "D0-human disagreement = formalisation bug; predicate MAY be corrected"
+  test_split: "D0-human disagreement = D0's MEASURED error rate; predicate MUST NOT be modified"
+
+coverage:
+  reported_per_class: true
+  status: "a RESULT in its own right, not a diagnostic (§4.8.1)"
+
+execution:
+  predicate_dir: src/semintegrity/detectors/d0/predicates
+  registry: src/semintegrity/detectors/d0/registry.py
+  input: canonicalised_responses_plus_kb_snapshot
+  kb_snapshot: data/raw/wikidata_cache      # frozen; jobs never hit the network
+  verdicts: [VIOLATION, SATISFIED, NOT_APPLICABLE]
+  skip_labels: [ABSTAIN, INVALID, FAILED]   # §4.8.2 reference implementation

@@ -1,0 +1,21 @@
+# Paraphrase validation protocol (proposal §4.4.5)
+# NLI is explicitly NOT the certifier — validating paraphrases with NLI and then
+# measuring contradiction with NLI is close to circular, and MNLI models are
+# out-of-distribution on interrogative and cloze forms.
+pipeline:
+  1_generate:  "candidate probes generated from the formal representation"
+  2_auto_filter:
+      checks: [format_wellformed, entity_presence, answer_type_match,
+               factor_cell_assignment_valid, no_answer_leakage]
+  3_human_validation:
+      primary_tier:    { annotators: 2, blinded: true }
+      saturation_tier: { annotators: 1, blinded: true, note: "deliberate cost trade-off; biases saturation EARLY" }
+  4_rewrite_or_discard: "record discard rate per tier; report extension vs primary discard rate"
+  5_freeze: "benchmark frozen; NO changes after this point"
+
+nli_agreement:
+  role: supporting_evidence_only
+  never_used_as: certifier
+
+gates:
+  primary_tier_survival_rate: ">= 0.90"     # pilot go/no-go criterion (§4.12)

@@ -1,0 +1,24 @@
+# Semantic instructions. The TEXT is held constant across models; the RENDERED
+# prompt differs because each model applies its own official chat template.
+# Tuned on the development split ONLY, then frozen (§5.6).
+instructions:
+  trackA.v1:
+    status: DRAFT                # frozen at Phase 4 preregistration
+    text: |
+      Answer the question using only your own knowledge.
+      Reply with the answer and nothing else: no explanation, no punctuation beyond the answer itself.
+      If the expected answer is a name, reply with the name only.
+      If the expected answer is yes or no, reply with exactly YES or NO.
+      If the expected answer is a date, reply with the date only.
+      If you do not know the answer, reply with exactly UNKNOWN.
+  trackB.v1:
+    status: DRAFT
+    text: |
+      Answer the question using only your own knowledge.
+      Answer naturally and completely.
+  knowledge_screen.v1:
+    status: DRAFT
+    text: |
+      Answer the question using only your own knowledge.
+      Reply with the answer and nothing else.
+      If you do not know the answer, reply with exactly UNKNOWN.

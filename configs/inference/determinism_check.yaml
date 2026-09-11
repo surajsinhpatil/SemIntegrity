@@ -1,0 +1,13 @@
+# Empirical determinism check (§4.6). Determinism is VERIFIED, never assumed.
+experiment: determinism_check
+n_prompts: 100
+prompt_selection: { rule: "stratified random over class x model", seed: 20250058 }
+modes:
+  identical_batch_composition: "same batch size, same ordering, same seed — isolates kernel non-determinism"
+  shuffled_batch_composition: "same prompts, different batching — isolates batch-composition non-determinism"
+report:
+  - exact_match_rate_per_model_per_mode
+  - canonical_label_match_rate_per_model_per_mode
+  - residual_variance_if_present
+claim_policy: "Never claim perfect determinism. Report measured rates."
+output: { format: jsonl, path: results/raw/determinism_check/, immutable: true }

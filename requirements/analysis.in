@@ -1,0 +1,12 @@
+-r login.in
+scipy>=1.11
+statsmodels>=0.14
+scikit-learn>=1.4
+matplotlib>=3.8
+seaborn>=0.13
+krippendorff>=0.6
+# Beta-binomial mixed model backend — see ADR-0004. PyMC is the default;
+# glmmTMB via R is the cross-check if R is available on the cluster.
+pymc>=5.15
+arviz>=0.18
+numpyro>=0.15

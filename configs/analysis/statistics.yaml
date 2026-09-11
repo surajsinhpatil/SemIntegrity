@@ -1,0 +1,74 @@
+# Statistical analysis plan (proposal §4.11). Frozen at preregistration (Phase 4).
+independent_unit: constraint
+pair_level_independence_assumption: FORBIDDEN
+rationale: "pairs (A,B) and (A,C) share response A; with K=8 effective information is closer to 8 responses than 28 pairs"
+
+confirmatory:
+  procedure: cluster_bootstrap
+  resample: constraints_with_replacement
+  n_boot: 10000
+  ci: 0.95
+  ci_method: BCa
+  seed: 20250058
+  contrasts:
+    - id: H1_primary
+      name: "C1+C2 vs C3+C4"
+      arm_size: 60
+      direction: "higher-structure classes expected greater; two-sided test reported"
+    - id: H1_planned
+      name: "C4 vs C1-C3 pooled"
+  multiplicity: "confirmatory contrasts are pre-specified and EXEMPT from FDR"
+
+descriptive:
+  four_class_profile: "individual class estimates with cluster-bootstrap intervals"
+  framing: "structural inconsistency PROFILE, not a complexity curve"
+
+secondary_model:
+  family: beta_binomial_mixed
+  response: "cbind(contradictions, evaluable_pairs - contradictions)"
+  formula: >-
+    contradictions / evaluable_pairs ~ class * model_family
+    + log(entity_sitelinks)
+    + probe_polarity + probe_syntax + probe_direction
+    + (1 | schema/constraint)
+    + (1 | domain)
+  overdispersion_absorbs: residual_pair_dependence
+  # DECIDED 2026-09-11 (researcher) — option A, see ADR-0009.
+  probe_factor_unit_conflict:
+    status: DECIDED
+    resolution: disaggregate_binomial_cells
+    unit_of_analysis: "constraint x model x pair-factor-cell"
+    pair_factor_cells:
+      # A pair has TWO probes. Each probe factor becomes an UNORDERED pair-level
+      # level, so the covariate is well-defined at the row's unit.
+      polarity:  [aff-aff, aff-neg, neg-neg]
+      syntax:    [dec-dec, dec-int, dec-clz, int-int, int-clz, clz-clz]
+      direction: [dir-dir, dir-rev, rev-rev]
+    denominator: "evaluable pairs falling in that cell"
+    note: >-
+      Cells are sparse by construction (28 pairs spread over up to 3x6x3 = 54
+      combinations), so the three factors enter as separate main effects, not as
+      a full interaction. Cells with zero evaluable pairs contribute no row.
+  backend:
+    # UNRESOLVED (Q8): no R on the local machine; cluster R availability unknown.
+    status: UNRESOLVED
+    primary_proposed: pymc            # pure-Python beta-binomial + random intercepts
+    crosscheck_proposed: glmmTMB      # R, only if available on the cluster
+  domain_random_effect_caveat: "5 levels is at the lower bound for a random effect; report variance estimate with caution"
+
+exploratory:
+  - qwen_scale_trend_3b_7b_14b        # descriptive; NOT a scaling law
+  - knowledge_conditioned_analysis
+  - pcs_vs_pscr_divergence_on_closed_answer_subset
+  - stochastic_vs_fixed_decoding_variance_decomposition
+
+multiplicity:
+  method: benjamini_hochberg
+  applied_to: "everything outside the pre-specified confirmatory contrasts"
+
+precedence: "Where the bootstrap and the GLMM disagree on a quantity both can estimate, the BOOTSTRAP governs and the discrepancy is reported."
+
+knowledge_availability:
+  screen: "prerequisite atomic facts asked directly of each model"
+  reporting: [unconditional, conditioned_on_demonstrable_knowledge]
+  conditioning_is_an_inclusion_criterion: false     # reporting view ONLY

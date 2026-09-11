@@ -1,0 +1,96 @@
+# ===========================================================================
+# Benchmark design lattice (proposal §4.3)
+# The design is fully determined by the proposal's counts; this file states
+# the resolution explicitly so it can be machine-validated before authoring.
+# See docs/decisions/ADR-0002-benchmark-design-lattice.md
+# ===========================================================================
+lattice:
+  # 30 families x 4 classes = 120 constraints
+  # 6 families per domain x 5 domains = 30 families
+  #  -> 6 constraints per domain per class                     (§4.3 ✓)
+  #  -> 30 constraints per class                               (§4.3 ✓)
+  family:
+    count: 30
+    spans_all_classes: true
+    domain_fixed_within_family: true
+    purpose: >-
+      Nuisance control (§4.3): same domain, comparable entity familiarity,
+      answer type and lexical complexity across the 4 class variants.
+      Family variants are deliberately NOT semantically equivalent.
+  schema:
+    count_per_class: 6
+    instances_per_schema: 5
+    crossing: "schema x domain fully crossed (6 x 5 = 30 per class)"
+    statistical_role: "nested random effect (1 | schema/constraint)"
+  domain:
+    count: 5
+    constraints_per_domain_per_class: 6
+    statistical_role: "(1 | domain) — balancing/control variable ONLY; no inferential claim"
+
+validation_rules:              # enforced by src/semintegrity/benchmark/design_validator.py
+  - id: total_count
+    assert: "len(constraints) == 120"
+  - id: class_balance
+    assert: "every class has exactly 30 constraints"
+  - id: domain_class_balance
+    assert: "every (domain, class) cell has exactly 6 constraints"
+  - id: family_completeness
+    assert: "every family has exactly one constraint per class"
+  - id: family_domain_fixed
+    assert: "all constraints in a family share one domain"
+  - id: schema_balance
+    assert: "every schema has exactly 5 instances; no schema dominates a class"
+  - id: sitelink_matching
+    assert: "entity_sitelinks distribution matched across classes (see thresholds below)"
+  - id: unique_ids
+    assert: "constraint_id, family_id, schema_id, probe_id are globally unique"
+
+entity_familiarity:
+  metric: wikidata_sitelinks     # deterministic, not time-sensitive (§4.3)
+  aggregate_per_constraint: median_over_entities
+  matching_test:
+    # Pre-registered check that class is not confounded with entity familiarity.
+    procedure: kruskal_wallis_over_classes
+    target: "p > 0.10 (fail to reject equality of distributions)"
+    on_failure: "re-author offending constraints BEFORE freeze; never after"
+  covariate_in_model: "log(entity_sitelinks)"
+
+ground_truth:
+  primary_source: wikidata
+  wikidata_is_absolute_truth: false
+  temporal_qualifiers_required: [P580, P582]   # start time, end time
+  corroboration_required_for: [history, temporal_facts]
+  second_source_required: true
+  per_constraint_fields: [gold_source, gold_source_url, gold_source_date]
+
+splits:
+  # DECIDED 2026-09-11 (researcher) — see ADR-0007.
+  # The 120 constraints ARE the test set, so the confirmatory arms stay at
+  # exactly 60/60. Development data is a SEPARATE, DISJOINT set.
+  status: DECIDED
+  development:
+    source: "separate set, disjoint from the 120"
+    size: 24
+    per_class: 6
+    composition:
+      - "the 12 Phase-1 pilot constraints (3 per class) are absorbed into it"
+      - "12 further constraints authored to reach 6 per class"
+    entity_rule: "same schemas as the test set, DIFFERENT entity instantiations"
+    disjointness_rule: >-
+      No entity set, gold proposition or probe surface form may be shared with
+      a test constraint. Enforced by benchmark/design_validator.py before freeze.
+    uses:
+      - d2_checkpoint_selection
+      - d2_per_class_threshold_calibration
+      - d3_prompt_tuning
+      - trackb_extraction_rule_tuning
+      - d0_predicate_correction
+      - canonicaliser_alias_tuning
+    probes_per_constraint: 8
+    probe_count: 192
+  test:
+    source: "the frozen 120"
+    size: 120
+    per_class: 30
+    uses: [all_confirmatory_and_descriptive_analysis]
+    rule: "nothing is tuned on this set; every tuned artefact is hashed and frozen before it is touched"

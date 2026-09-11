@@ -1,0 +1,155 @@
+# ===========================================================================
+# SemIntegrity — master project configuration
+# Single source of truth for every FROZEN quantity in the proposal.
+# Each block cites the proposal section it is derived from.
+# Nothing here may be changed after the corresponding phase gate without an
+# ADR in docs/decisions/ recording the change and its justification.
+# ===========================================================================
+project:
+  name: SemIntegrity
+  title: >-
+    Measuring Semantic Self-Inconsistency in Large Language Models
+    Across Structured Integrity Constraints
+  proposal_revision: "v2"
+  proposal_file: proposal/semintegrity_proposal.docx
+  student: "Surajsinh Patil"
+  institution: "BITS Pilani"
+  theme: "E — Evaluation & Standards"
+
+# --- Constraint taxonomy (proposal §4.2) -----------------------------------
+# CATEGORICAL experimental conditions. NOT an ordered complexity scale.
+constraint_classes:
+  ordered: false          # enforced by tests; guards against ordinal modelling
+  classes:
+    C1:
+      name: Atomic
+      structural_requirement: "A single proposition with direct mutual exclusion"
+    C2:
+      name: Conjunctive / relational
+      structural_requirement: "Two or more propositions that must hold jointly"
+    C3:
+      name: Quantified / rule-based
+      structural_requirement: "Universal quantification with variable binding"
+    C4:
+      name: Temporal
+      structural_requirement: "Reasoning over validity intervals or ordering"
+  excluded:
+    - id: modal
+      reason: "Separate reasoning dimension; Wikidata holds no modal facts, so no ground truth (§4.2)"
+    - id: counterfactual
+      reason: "As above (§4.2)"
+
+# --- Domains (proposal §4.3) ----------------------------------------------
+domains: [geography, history, biology, public_office, science_technology]
+
+# --- Benchmark size (proposal §4.3) ---------------------------------------
+benchmark:
+  total_constraints: 120
+  constraints_per_class: 30
+  constraints_per_domain_per_class: 6
+  families: 30                    # 1 family spans all 4 classes, fixed domain
+  families_per_domain: 6
+  schemas_per_class: 6            # 6 schemas x 5 instances = 30  (see ADR-0002)
+  instances_per_schema: 5
+  frozen_after: "phase_5_validation"
+  # Development set is SEPARATE and DISJOINT (ADR-0007), so the confirmatory
+  # arms remain exactly 60/60 over the 120.
+  development_constraints: 24
+  development_per_class: 6
+  development_probes: 192
+
+# --- Probe design (proposal §4.4) -----------------------------------------
+probes:
+  primary:
+    k: 8
+    total: 960                    # 120 x 8
+    pairs_per_constraint: 28      # C(8,2)
+  saturation:
+    constraints: 24
+    constraints_per_class: 6
+    k: 50
+    additional_probes: 1008       # 24 x (50 - 8): the first 8 are reused
+    evaluated_at_k: [2, 4, 8, 16, 32, 50]
+    detectors: [D0, D2]           # cost control (§4.8.5)
+    validation: "single blinded human screen + automated filter (§4.4.4)"
+    reporting: "observed saturation budget is a LOWER BOUND"
+  track_b:
+    constraints: 20
+    k: 8
+    format: free_form
+  factors:                        # §4.4.2 — balanced exactly across classes
+    syntax:         [declarative, interrogative, cloze]
+    polarity:       [affirmative, negated]
+    register:       [formal, colloquial]
+    directionality: [direct, reverse]
+    distractor_context:
+      conditions: [absent, present]
+      status: excluded_from_primary
+      reason: "separate secondary experiment (§4.4.2)"
+
+# --- Inference protocol (proposal §4.6) -----------------------------------
+inference:
+  dtype: bfloat16                 # uniform; quantisation NOT used selectively
+  quantisation: none
+  primary:
+    temperature: 0.0
+    seed: 20250058
+    description: "fixed-decoding — NEVER described as deterministic"
+  determinism_check:
+    n_prompts: 100
+    modes: [identical_batch_composition, shuffled_batch_composition]
+  stochastic_subset:
+    constraints: 20
+    temperature: 0.7
+    samples_per_probe: 3
+    decompose: [within_probe_sampling_instability, across_paraphrase_inconsistency]
+
+# --- Response canonicalisation labels (proposal §4.7) ---------------------
+canonicalisation:
+  labels: [ANSWER, ABSTAIN, INVALID, AMBIGUOUS, FAILED]
+  timeout_policy:
+    retries: 1
+    retry_config: identical
+    terminal_label: FAILED
+  rule: "Responses are NEVER manually cleaned after results are inspected."
+
+# --- Detectors (proposal §4.8) --------------------------------------------
+detectors:
+  stage0: canonicalisation
+  layers: [D0, D1, D2, D3, D4]
+  gold_standard: blinded_human_annotation
+  d4_disclaimer: "D4 is NOT a contradiction detector and is never reported as one."
+
+# --- Metrics (proposal §4.10) ---------------------------------------------
+metrics:
+  primary_endpoint: PSCR
+  key_secondary: PCS              # closed-answer subset only
+  secondary: [ConsistencyAtK, AOCR, TruthAccuracy, AbstentionRate, RecoveryAtK, D0Coverage]
+  detector: [precision, recall, f1, auprc]
+  annotation: [krippendorff_alpha, raw_agreement, confusion_matrix]
+  reliability_triad: [TruthAccuracy, PSCR, AbstentionRate]   # never collapsed
+
+# --- Statistics (proposal §4.11) ------------------------------------------
+statistics:
+  independent_unit: constraint    # NOT the probe pair
+  confirmatory:
+    contrast: "C1+C2 vs C3+C4"
+    arm_size: 60
+    procedure: cluster_bootstrap_over_constraints
+  planned_contrast:
+    contrast: "C4 vs C1-C3 pooled"
+    procedure: cluster_bootstrap_over_constraints
+  four_class_profile: descriptive_only
+  multiplicity: benjamini_hochberg   # everything OUTSIDE confirmatory contrasts
+  precedence: "Where bootstrap and GLMM disagree, the bootstrap governs; report the discrepancy."
+
+# --- Human-only tasks (never simulated, never fabricated) -----------------
+human_only:
+  - probe_semantic_equivalence_validation
+  - annotation_sample_a
+  - annotation_sample_b
+  - adjudication_of_disagreements
+  - ground_truth_final_judgement
+  - literature_novelty_statement_signoff
+  - osf_preregistration_submission
+  - credential_entry_and_licence_acceptance

@@ -1,0 +1,15 @@
+# Knowledge-availability control (§4.11)
+experiment: knowledge_screen
+tier: knowledge_screen
+track: A
+unit: prerequisite_atomic_fact
+source_field: prerequisite_atomic_facts      # per constraint
+semantic_instruction_id: knowledge_screen.v1
+decoding: { temperature: 0.0, top_p: 1.0, top_k: -1, seed: 20250058 }
+max_new_tokens: 24
+reporting:
+  unconditional: required
+  conditioned_on_demonstrable_knowledge: required
+  conditioning_is_an_inclusion_criterion: false
+  rationale: "so that interesting failures are not silently removed"
+output: { format: jsonl, path: results/raw/knowledge_screen/, immutable: true }

@@ -1,0 +1,19 @@
+# Saturation tier (§4.4.4) — probe-budget curve
+experiment: saturation_trackA
+tier: saturation
+track: A
+constraints: 24
+constraints_per_class: 6
+k: 50
+reuses_primary_probes: true          # the first 8 of the 50 are the primary probes
+additional_probes: 1008              # 24 x 42
+evaluated_at_k: [2, 4, 8, 16, 32, 50]
+subsampling:
+  method: rarefaction
+  draws_per_k: 1000
+  seed: 20250058
+detectors: [D0, D2]                  # cost control (§4.8.5)
+decoding: { temperature: 0.0, top_p: 1.0, top_k: -1, seed: 20250058 }
+workload: { generations_per_model: 1008, total_generations: 7056 }
+reporting: "observed saturation budget is a LOWER BOUND (lighter probe validation biases it early)"
+output: { format: jsonl, path: results/raw/saturation_trackA/, immutable: true }

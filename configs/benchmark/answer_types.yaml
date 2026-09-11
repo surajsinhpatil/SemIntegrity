@@ -1,0 +1,20 @@
+# Track A constrained output contracts (proposal §4.4.3)
+# The model returns ONLY the requested value, or the literal token UNKNOWN.
+answer_types:
+  entity:
+    output_contract: "a single entity name, nothing else"
+    example_valid: ["Canberra"]
+  boolean:
+    output_contract: "exactly one of: YES, NO"
+    example_valid: ["YES", "NO"]
+  date:
+    output_contract: "ISO-8601 date or year, nothing else"
+    example_valid: ["1901", "1901-01-01"]
+  abstain_token: "UNKNOWN"
+
+instruction_invariance:
+  rule: >-
+    The SEMANTIC instruction is held constant across models; the RENDERED prompt
+    is not, because each model uses its own official chat template (§4.6).
+    Both are logged: `semantic_instruction_id` and `rendered_prompt`.
+  system_instruction_id: "trackA.v1"     # text lives in configs/inference/prompts.yaml

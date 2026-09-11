@@ -1,0 +1,37 @@
+# Blinded human annotation (proposal §4.9). NEVER simulated, NEVER fabricated.
+unit: response_pair
+
+visible_to_annotator: [constraint_text, probe_a, response_a, probe_b, response_b]
+withheld_from_annotator: [model_identity, detector_prediction, constraint_class, expected_outcome]
+
+labels:
+  relation: [compatible, contradictory, unclear]
+  correctness_a: [correct, incorrect, unclear]
+  correctness_b: [correct, incorrect, unclear]
+  response_status: [answer, abstain]
+  contradiction_reason: "from configs/annotation/failure_taxonomy.yaml, required when relation == contradictory"
+
+samples:
+  A_representative:
+    target_size: 400
+    design: "pure random probability sample, stratified by class and model"
+    supports: [unbiased_prevalence_estimation, detector_correction_sensitivity_analysis]
+  B_enriched:
+    target_size: 300
+    design: "oversamples detector disagreements, suspected contradictions, unclear cases, difficult C3/C4 items"
+    supports: [detector_precision, detector_recall]
+    final_size_fixed_after: pilot
+  blending_forbidden: true       # "yields a sample that does neither job correctly"
+
+annotators:
+  count: 2
+  adjudication: required_for_disagreements
+  # HUMAN DEPENDENCY: a second annotator is not yet identified. See Q9.
+  second_annotator_identified: false
+
+agreement:
+  primary: krippendorff_alpha
+  also_report: [raw_agreement, contradiction_prevalence, confusion_matrix]
+  stratification: [overall, per_class]
+  cohens_kappa: avoided
+  cohens_kappa_reason: "behaves poorly when one class dominates, which it will here"

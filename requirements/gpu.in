@@ -1,0 +1,13 @@
+# GPU/Slurm environment. Exact torch/vllm pins are DEFERRED until the cluster
+# CUDA version is known — see requirements/README.md. Placeholders are ranges,
+# NOT verified pins. Do not treat as reproducible until locked.
+-r login.in
+torch                      # PIN AFTER CLUSTER PROBE (CUDA-dependent)
+vllm                       # PIN AFTER CLUSTER PROBE (must support Gemma-2 soft-capping)
+transformers>=4.44         # >=4.42 required for Gemma-2; 4.44+ safer
+tokenizers>=0.19
+accelerate>=0.33
+huggingface_hub>=0.24
+sentencepiece>=0.2
+protobuf>=4.25
+safetensors>=0.4

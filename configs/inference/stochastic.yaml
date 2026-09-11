@@ -1,0 +1,20 @@
+# Stochastic subset (§4.6) — decomposes sampling instability from probe-induced inconsistency
+experiment: stochastic_trackA
+tier: stochastic
+track: A
+constraints: 20
+constraint_selection:
+  rule: "preregistered stratification over class, domain, schema, entity familiarity"
+  fixed_before: any_output_inspection
+  selected_ids: null                 # written by scripts/benchmark/select_subsets.py
+decoding: { temperature: 0.7, top_p: 1.0, top_k: -1, repetition_penalty: 1.0 }
+samples_per_probe: 3
+seeds_per_sample: [20250058, 20250059, 20250060]
+workload: { probes: 160, generations_per_model: 480, total_generations: 3360 }
+analysis:
+  decompose:
+    within_probe: "disagreement among the 3 samples of the SAME probe = sampling instability"
+    across_paraphrase: "disagreement across probes = probe-induced inconsistency"
+  reported: separately
+  never_pooled: true
+output: { format: jsonl, path: results/raw/stochastic_trackA/, immutable: true }

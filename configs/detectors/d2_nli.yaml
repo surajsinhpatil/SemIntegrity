@@ -1,0 +1,32 @@
+# D2 — NLI on declarative renderings (proposal §4.8.4)
+id: D2
+role: "Automated semantic contradiction signal"
+degrades_with_class: true                    # measured, not assumed
+
+checkpoint_selection:
+  status: EMPIRICAL_NOT_ASSUMED
+  selected: null                             # chosen on DEV split, then frozen
+  selection_criterion: "best AUPRC against human-labelled dev contradiction pairs"
+  candidates:
+    mnli_only:    ["roberta-large-mnli", "microsoft/deberta-large-mnli"]
+    multi_corpus: ["MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli",
+                   "ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli"]
+  rule: "no candidate is presumed better on model-card or leaderboard figures"
+
+input:
+  operates_on: declarative_propositions_only
+  conversion: "question and cloze forms are converted to statements by Stage 0 before classification"
+  granularity: claim_level                   # constraint-relevant proposition extracted first
+  rendering_templates: src/semintegrity/detectors/d2/templates.py
+
+scoring:
+  bidirectional: true                        # NLI is asymmetric
+  aggregate: max_contradiction_probability
+
+threshold:
+  default_0_5_forbidden: true                # "A bare 0.5 threshold is never used."
+  calibrated: per_class
+  calibrated_on: development_split
+  frozen_before: test_evaluation
+  values: null                               # populated by scripts/detectors/calibrate_d2.py
+  frozen_at: null

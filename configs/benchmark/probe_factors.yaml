@@ -1,0 +1,64 @@
+# ===========================================================================
+# Probe transformation factor design (proposal §4.4.2)
+# "Probe transformation factors are balanced exactly across classes."
+#
+# PROBLEM: the four factors span 3 x 2 x 2 x 2 = 24 cells but K = 8, so a full
+# crossing is impossible within a constraint. "Balanced across classes" must
+# therefore mean a fractional design that is exactly balanced at CLASS level.
+#
+# RESOLUTION (verified arithmetically, see tests/unit/test_probe_balance.py):
+#   * (polarity x register x directionality) = 2 x 2 x 2 = 8 == K
+#     -> every constraint carries each of these 8 cells EXACTLY ONCE.
+#   * syntax (3 levels) is rotated across constraints:
+#         syntax(constraint j, cell i) = SYNTAX[(i + j) mod 3]
+#     -> per class: 30 constraints x 8 slots = 240 slots over 24 cells
+#        = EXACTLY 10 observations per cell, per class.
+#     -> whole benchmark: 960 / 24 = EXACTLY 40 per cell.
+#   * Within a constraint syntax splits 3/3/2 — 8 is not divisible by 3, so
+#     within-constraint syntax balance is impossible by construction. Balance
+#     is a CLASS-level property, which is the level the proposal argues at
+#     ("a class effect cannot be an artefact of ... more negated phrasings
+#     appearing at C4").
+# See docs/decisions/ADR-0003-probe-factor-balancing.md
+# ===========================================================================
+factors:
+  syntax:         { levels: [declarative, interrogative, cloze], balance_level: class }
+  polarity:       { levels: [affirmative, negated],              balance_level: constraint }
+  register:       { levels: [formal, colloquial],                balance_level: constraint }
+  directionality: { levels: [direct, reverse],                   balance_level: constraint }
+
+assignment:
+  k: 8
+  within_constraint_cells: "product(polarity, register, directionality)  # 8 cells, each once"
+  syntax_rotation: "SYNTAX[(cell_index + constraint_index_within_class) % 3]"
+  constraint_index_within_class: "0..29, assigned by the frozen ordering in the benchmark manifest"
+
+guarantees:                      # asserted by tests, re-checked at freeze time
+  cells_per_class: 24
+  observations_per_cell_per_class: 10
+  observations_per_cell_total: 40
+  probe_slots_per_class: 240
+  probe_slots_total: 960
+
+answer_type_note: >-
+  Directionality deliberately changes the surface question form and MAY change
+  answer_type within a constraint (e.g. "Is A the X of B?" -> boolean vs
+  "What is the X of B?" -> entity). This is expected (§4.7) and is precisely
+  what Stage 0 canonicalisation exists to reconcile: both forms are mapped into
+  the constraint's single closed canonical answer space before any detector
+  sees them. A raw-string comparison across such a pair is meaningless and is
+  never performed.
+
+formal_probe_representation:     # §4.4.1 — equivalence is identity of this record
+  fields: [constraint_id, probe_id, logical_form, subject, predicate, object,
+           time_scope, quantifier, polarity, answer_type]
+  equivalence_rule: >-
+    Two probes are semantically equivalent IFF their formal representations are
+    identical. Surface factors (syntax, register, directionality) are NOT part
+    of the equivalence key; polarity IS part of the surface realisation but the
+    logical_form must be polarity-normalised so that a negated probe and its
+    affirmative counterpart share one logical_form.
+
+excluded:
+  distractor_context:
+    reason: "distinct RQ (robustness to irrelevant context); separate secondary experiment (§4.4.2)"

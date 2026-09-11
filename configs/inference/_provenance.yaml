@@ -1,0 +1,35 @@
+# Provenance logged with EVERY response (proposal §4.6). No field is optional.
+# Enforced by src/semintegrity/schemas/response.py — a response missing any
+# field is rejected at write time, not discovered later.
+required_fields:
+  - model_id
+  - hf_revision_hash
+  - tokenizer_hash
+  - transformers_version
+  - vllm_version
+  - torch_version
+  - cuda_version
+  - gpu_model
+  - dtype
+  - quantisation
+  - temperature
+  - top_p
+  - top_k
+  - repetition_penalty
+  - max_new_tokens
+  - stop_sequences
+  - chat_template_hash
+  - rendered_prompt
+  - seed
+  - batch_size
+  - sample_index
+  - timestamp
+experiment_fields:            # added by this implementation, beyond the proposal
+  - experiment_id
+  - config_snapshot_sha256
+  - run_id
+  - probe_id
+  - constraint_id
+  - track                     # A | B
+  - tier                      # primary | saturation | stochastic | knowledge_screen | determinism
+  - semantic_instruction_id

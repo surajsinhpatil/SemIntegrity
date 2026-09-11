@@ -1,0 +1,21 @@
+# Phase 3 pilot (§4.12): 12 constraints x 5 probes x 3 models x all detectors
+experiment: pilot
+tier: pilot
+track: A
+constraints: 12
+constraints_per_class: 3
+probes_per_constraint: 5
+models: [qwen25-3b, llama31-8b, gemma2-9b]   # smallest + one per other family; PENDING SIGNOFF (Q10)
+detectors: [D0, D1, D2, D3, D4]
+workload: { probes: 60, generations_per_model: 60, total_generations: 180 }
+go_no_go:                                      # fixed IN ADVANCE (§4.12)
+  - { id: GT,        criterion: ">= 95% of pilot constraints have unambiguous, sourceable ground truth" }
+  - { id: PROBE,     criterion: ">= 90% of candidate probes survive human semantic-equivalence validation" }
+  - { id: CANON,     criterion: "Stage 0 correctly canonicalises >= 95% of valid pilot responses" }
+  - { id: D0AUDIT,   criterion: "every D0 predicate passes its three-instance schema audit" }
+  - { id: NONDEGEN,  criterion: "D2 and D3 produce non-degenerate predictions (not all-contradiction, not all-compatible)" }
+  - { id: IAA,       criterion: "inter-annotator agreement on the pilot batch is acceptable" }
+  - { id: ABSTAIN,   criterion: "no class shows an abstention rate so dominant that cross-class comparison is meaningless" }
+on_failure: "pipeline revision BEFORE the full benchmark is authored"
+note: "IAA threshold is qualitative in the proposal; a numeric value must be fixed at Phase 4 preregistration (Q11)"
+output: { format: jsonl, path: results/raw/pilot/, immutable: true }

@@ -1,0 +1,17 @@
+# Predefined contradiction-reason taxonomy (proposal §4.9, §5.5).
+# Frozen before annotation begins. Codes are stable identifiers.
+codes:
+  - { code: NEG,   label: "negation handling",        description: "affirmative and negated phrasings yield incompatible answers" }
+  - { code: TEMP,  label: "temporal anchoring",       description: "validity interval or ordering mishandled" }
+  - { code: QSCOPE,label: "quantifier scope",         description: "universal/existential scope misapplied" }
+  - { code: REV,   label: "relation reversal",        description: "direct vs reverse phrasing yields incompatible answers"}
+  - { code: ENTSUB,label: "entity substitution",      description: "an entity is silently swapped for a related one" }
+  - { code: COREF, label: "coreference",              description: "pronoun/definite-description resolution differs across probes" }
+  - { code: DIST,  label: "distractor context",       description: "irrelevant context changes the answer (secondary experiment only)" }
+  - { code: REG,   label: "register sensitivity",     description: "formal vs colloquial phrasing yields incompatible answers" }
+  - { code: SYN,   label: "syntactic form",           description: "declarative/interrogative/cloze form yields incompatible answers" }
+  - { code: OTHER, label: "other",                    description: "free-text required" }
+notes: >-
+  §5.5 commits to a qualitative failure taxonomy quantifying which linguistic
+  triggers drive disproportionate violation. DIST is included as a code for the
+  secondary distractor experiment only; it can never appear in the primary set.

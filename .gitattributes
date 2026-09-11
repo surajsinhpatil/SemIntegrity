@@ -1,0 +1,11 @@
+# Normalise line endings
+* text=auto eol=lf
+
+# Data formats: never diff as text, never merge automatically
+*.jsonl   -diff -merge
+*.parquet -diff -merge binary
+*.docx    binary
+*.pdf     binary
+
+# Frozen benchmark artefacts: flag any attempted merge loudly
+data/benchmark/** -merge

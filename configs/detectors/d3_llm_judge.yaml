@@ -1,0 +1,39 @@
+# D3 — pairwise LLM judge (proposal §4.8.5)
+id: D3
+role: "Flexible semantic evaluator"
+degrades_with_class: true
+judge_config: configs/models/_judge.yaml     # model choice UNRESOLVED — see Q3
+
+protocol:
+  unit: pair                                 # matches D2 and the primary metric
+  set_level_verdict_forbidden: true          # discards which pair conflicted; position effects
+  single_shot: true                          # like-for-like with D1/D2 — NO ensembling
+  randomise_ab_order: true
+  prompt_file: configs/detectors/d3_prompt.txt
+  prompt_tuned_on: development_split_only
+  prompt_frozen_before: test_evaluation
+
+output_schema:
+  label: [CONTRADICTION, COMPATIBLE, UNCLEAR]
+  confidence: "float in [0,1]"
+  conflicting_span_a: "string | null"
+  conflicting_span_b: "string | null"
+  reason: "string"
+  note: "spans materially accelerate human validation (§4.8.5)"
+
+stability:
+  stratified_subset: true
+  repeats: 3
+  randomise_order_each_repeat: true
+  report: [self_agreement, label_flip_rate]
+
+integrity:
+  judge_external_to_all_evaluated_models: true
+  archive_every_raw_judgement: true
+  archive_path: results/detectors/d3/raw/
+  family_affinity_check:
+    description: "judge-human agreement compared across Qwen-generated vs non-Qwen-generated responses"
+    status: required
+
+scope:
+  saturation_tier: excluded                  # cost control (§4.8.5)

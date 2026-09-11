@@ -1,0 +1,31 @@
+# D4 — distributional instability (proposal §4.8.6) — EXPLORATORY
+id: D4
+role: "Exploratory grey-box analysis"
+IS_A_CONTRADICTION_DETECTOR: false           # enforced by tests; never reported as one
+disclaimer: >-
+  Two distributions can differ substantially while agreeing on the top answer,
+  and can be nearly identical while straddling a decision boundary.
+
+question: "Does inconsistency appear only at the decoding layer, or is it already visible in the output distribution?"
+
+method:
+  candidate_set: "the constraint's known closed answer set"
+  scoring: teacher_forced_sequence_logprob
+  length_normalisation: per_token_log_probability   # raw sequence probs are length-biased
+  # UNRESOLVED (Q5): length-normalised log-probs are not a probability
+  # distribution. The mapping to one must be pre-registered and frozen.
+  distribution_construction:
+    status: UNRESOLVED
+    proposed: "p_i = softmax_i(mean_token_logprob_i) over the candidate set"
+    alternatives: ["renormalise exp(sum_logprob_i)", "renormalise exp(mean_logprob_i / T) with frozen T"]
+  divergence: jensen_shannon
+  aggregation: mean_pairwise_JSD_within_constraint
+
+scope_limits:
+  track: A_only                              # requires a defined candidate set
+  cross_constraint_absolute_comparison: forbidden   # dissimilar candidate spaces
+  logits_are_not_parametric_knowledge: true  # §4.8.6 interpretation limit
+
+precedent:
+  cite: "Tsujimura et al. (ACL 2026) — JSD over response distributions"
+  contribution_here: "application to meaning-preserving paraphrases over knowledge-grounded constraints, NOT the measure"

@@ -1,0 +1,108 @@
+# ---------------------------------------------------------------------------
+# SemIntegrity .gitignore
+# Policy: code, configs, benchmark data and small derived tables are tracked.
+# Model weights, large raw generations and any secret is never tracked.
+# ---------------------------------------------------------------------------
+
+# --- Secrets (NEVER commit) -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+**/secrets/**
+**/*token*.txt
+**/*api_key*
+.hf_token
+.netrc
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# --- Environments -----------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+.conda/
+*.conda
+
+# --- Testing / tooling ------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.tox/
+
+# --- Notebooks --------------------------------------------------------------
+.ipynb_checkpoints/
+notebooks/**/*.ipynb_checkpoints
+
+# --- Model weights / HF caches (NEVER commit: hundreds of GB) ---------------
+models/
+hf_cache/
+.cache/
+*.safetensors
+*.bin
+*.gguf
+*.pt
+*.pth
+
+# --- Cluster job output -----------------------------------------------------
+slurm/logs/*
+!slurm/logs/.gitkeep
+logs/*
+!logs/.gitkeep
+core.*
+*.out
+*.err
+
+# --- Large experimental artefacts -------------------------------------------
+# Raw generations are immutable and archived separately (Zenodo/OSF DOI).
+# Tracked via manifest + checksum, not via git blobs.
+results/raw/**/*.jsonl
+results/raw/**/*.parquet
+!results/raw/**/MANIFEST.json
+!results/raw/**/*.sha256
+results/canonicalized/**/*.parquet
+results/detectors/**/*.jsonl
+results/detectors/**/*.parquet
+!results/detectors/**/MANIFEST.json
+
+# Figures: tracked (small, publication artefacts) — no ignore rule.
+
+# --- OS / editor ------------------------------------------------------------
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+!.vscode/settings.json.example

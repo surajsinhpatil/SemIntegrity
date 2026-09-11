@@ -1,0 +1,8 @@
+# D1 — canonical exact match (proposal §4.8.3)
+id: D1
+role: "Deterministic lexical baseline — a legitimate floor, NOT a strawman"
+applied_after: stage0_canonicalisation      # non-negotiable; §4.7
+degrades_with_class: coverage_only
+rule: "two canonical answers contradict IFF they are different members of the closed answer space"
+coverage_shrinkage_is_a_result: true
+auprc: not_applicable                        # binary detector: single operating point only

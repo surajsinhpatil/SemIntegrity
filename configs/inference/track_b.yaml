@@ -1,0 +1,19 @@
+# Track B (§4.4.3) — free-form, ecological validity check on Track A
+experiment: trackB_freeform
+tier: primary
+track: B
+constraints: 20
+k: 8
+semantic_instruction_id: trackB.v1
+max_new_tokens: 256
+decoding: { temperature: 0.0, top_p: 1.0, top_k: -1, seed: 20250058 }
+workload: { probes: 160, generations_per_model: 160, total_generations: 1120 }
+extraction:
+  # Track A "removes extraction error"; Track B reintroduces it and therefore
+  # needs an explicit, frozen extraction rule.
+  status: REQUIRED
+  rule_file: src/semintegrity/canonicalization/trackb_extraction.py
+  tuned_on: development_split_only
+  frozen_before: test_evaluation
+  error_rate_reported: true
+output: { format: jsonl, path: results/raw/trackB_freeform/, immutable: true }

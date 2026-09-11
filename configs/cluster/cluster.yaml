@@ -1,0 +1,90 @@
+# ===========================================================================
+# Institutional cluster configuration.
+# EVERY field marked UNKNOWN must be filled by scripts/cluster/probe_cluster.sh
+# run ON the login node. Nothing here is guessed.
+# ===========================================================================
+status: UNPROBED
+
+identity:
+  hostname: UNKNOWN
+  scheduler: slurm
+  work_dir: /nfs_home/users/yashsinha/H202500058_Suraj
+  work_dir_note: >-
+    Path lies under another user's home (yashsinha). Confirmed by the researcher
+    as the designated working directory. All project files stay inside it.
+
+hard_rules:
+  login_node_allowed:   [edit_files, git, lightweight_commands, squeue_sacct, sbatch]
+  login_node_forbidden: [model_inference, model_download, nli_scoring, glmm_fitting, any_gpu_work]
+  never_modify: [other_users_folders, shared_environments, system_packages, cluster_wide_config]
+  enforcement: >-
+    scripts/_guard_login_node.sh is sourced by every heavy script and aborts if
+    it detects it is running on the login node without SLURM_JOB_ID set.
+
+partitions:        # filled by probe_cluster.sh (sinfo)
+  status: UNKNOWN
+  discovered: []
+
+gpus:              # filled by probe_cluster.sh
+  status: UNKNOWN
+  discovered: []
+
+storage:
+  quota_gb: UNKNOWN
+  # Weights needed if all 7 models are cached in bf16 (estimates):
+  #   3B ~7 + 7B ~16 + 7B ~15 + 8B ~16 + 9B ~19 + 14B ~30 + 70B ~141  =  ~244 GB
+  estimated_weights_gb: 244
+  hf_home: "${WORK_DIR}/hf_cache"
+  note: "weights are cached ONCE from a non-GPU session, never inside GPU time (§4.13)"
+
+software:
+  module_system: UNKNOWN
+  available_modules: []
+  cuda_version: UNKNOWN
+  driver_version: UNKNOWN
+  python_available: UNKNOWN
+  r_available: UNKNOWN          # determines the GLMM backend decision (Q8)
+
+network:
+  login_node_internet: UNKNOWN  # determines whether Wikidata/HF can be reached at all
+  compute_node_internet: UNKNOWN
+  proxy_required: UNKNOWN
+  mitigation: "KB snapshot + model weights are cached on the login node so compute jobs need NO network"
+
+resource_plan:     # sbatch requests; refined after the probe + pilot timings
+  small_models:    # <= 14B, bf16, tp=1
+    models: [qwen25-3b, mistral7b-v03, qwen25-7b, llama31-8b, gemma2-9b, qwen25-14b]
+    gpus: 1
+    gpu_min_vram_gb: 40
+    cpus_per_task: 8
+    mem_gb: 64
+    time: "04:00:00"
+  ceiling_model:   # 70B bf16 needs ~141 GB of weights + KV cache
+    models: [llama33-70b]
+    gpus: 2
+    gpu_min_vram_gb: 80
+    tensor_parallel_size: 2
+    cpus_per_task: 16
+    mem_gb: 256
+    time: "12:00:00"
+  nli_d2:
+    gpus: 1
+    gpu_min_vram_gb: 24
+    cpus_per_task: 8
+    mem_gb: 32
+    time: "02:00:00"
+  cpu_only:        # canonicalisation, D0, D1, metrics, bootstrap
+    gpus: 0
+    cpus_per_task: 16
+    mem_gb: 32
+    time: "02:00:00"
+
+fallback:          # §4.13 documented fallback
+  status: not_active
+  description: "managed notebook env up to 14B bf16; one rented 80GB GPU with 4-bit for the 70B ceiling"
+  required_if_activated:
+    - "quantisation ablation: Qwen2.5-14B at 4-bit on the primary set, to measure quantisation's effect on PSCR"
+    - "70B reported separately, sits on no regression line"
+  interpretation_rule: >-
+    A high-inconsistency 70B result under 4-bit is CONFOUNDED; a low-inconsistency
+    result is robust despite the handicap.

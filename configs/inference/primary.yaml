@@ -1,0 +1,20 @@
+# Primary run — Track A, full benchmark, fixed decoding (§4.6)
+experiment: primary_trackA
+tier: primary
+track: A
+tiers_included: [primary]
+decoding: { temperature: 0.0, top_p: 1.0, top_k: -1, repetition_penalty: 1.0, seed: 20250058 }
+max_new_tokens: 24
+semantic_instruction_id: trackA.v1
+models: [llama31-8b, mistral7b-v03, qwen25-7b, gemma2-9b, qwen25-3b, qwen25-14b, llama33-70b]
+workload:
+  probes: 960
+  per_model_generations: 960
+  total_generations: 6720
+output:
+  format: jsonl
+  path: results/raw/primary_trackA/
+  immutable: true
+  write_mode: append_only
+  resume: { enabled: true, key: [experiment_id, model_id, probe_id, sample_index] }
+language_note: "fixed-decoding inconsistency — NEVER described as deterministic"

@@ -1,0 +1,72 @@
+# Metric definitions (proposal §4.10). Frozen at preregistration.
+pscr:
+  role: PRIMARY_ENDPOINT
+  definition: "contradictory probe pairs / evaluable probe pairs, per constraint per model"
+  evaluable_pair:
+    # UNRESOLVED (Q6): the proposal does not define "evaluable". Proposed rule:
+    status: PROPOSED_PENDING_SIGNOFF
+    rule: "both responses canonicalise to ANSWER"
+    excluded_labels: [ABSTAIN, INVALID, AMBIGUOUS, FAILED]
+    zero_denominator_policy:
+      status: PROPOSED_PENDING_SIGNOFF
+      rule: "PSCR undefined -> constraint x model cell is NA; NA cells are carried through the cluster bootstrap as missing, never imputed as 0"
+      must_report: "count and per-class rate of NA cells, alongside abstention rate"
+
+pcs:
+  role: KEY_SECONDARY            # NOT co-primary: avoids multiplying confirmatory inference
+  definition: "largest canonical-answer cluster / K"
+  scope: closed_answer_subset_only
+  not_defined_in_general_case_because: "pairwise semantic contradiction is not transitive"
+  worked_examples_from_proposal:       # regression-tested in tests/unit/test_metrics.py
+    - { description: "4/4 split, K=8",        pscr: 0.5714, pcs: 0.50 }
+    - { description: "7 agree + 1 outlier",   pscr: 0.25,   pcs: 0.875 }
+    - { description: "8 distinct answers",    pscr: 1.00,   pcs: 0.125 }
+
+consistency_at_k:
+  definition: "proportion of constraints with no contradiction among K probes"
+  role: secondary
+
+aocr:
+  definition: "proportion of constraints with >= 1 contradiction detected"
+  role: secondary_descriptive
+  MUST_BE_LABELLED_K_DEPENDENT: true
+  demotion_reason: "AOCR ~ 1-(1-PSCR)^C(K,2); saturates near 1.0 and measures the detector, not the model"
+
+truth_accuracy:
+  definition: "proportion of responses matching knowledge-base ground truth"
+  role: separate_reliability_dimension
+
+abstention_rate:
+  definition: "proportion of responses labelled ABSTAIN"
+  role: separate_reliability_dimension
+  reported_per_class: true
+  note: "expected to rise at C4; that rise is itself a finding (§4.7)"
+
+recovery_at_k:
+  definition: "violations recovered with k probes / violations recovered at the reference budget"
+  method: rarefaction_style_subsampling_of_probe_subsets
+  reference_budget:
+    saturation_subset: 50
+    elsewhere: 8
+  framing: "a REFERENCE, never ground truth and never a proven asymptote"
+
+d0_coverage:
+  definition: "proportion of constraints per class admitting deterministic verification at all"
+  role: verifiability_result
+
+detector_scores:
+  metrics: [precision, recall, f1, auprc]
+  stratified_by: [detector, constraint_class]
+  gold: human_annotation
+  auprc_applicability:
+    # UNRESOLVED (Q7): AUPRC needs a continuous score.
+    D0: not_applicable          # binary
+    D1: not_applicable          # binary
+    D2: applicable              # contradiction probability
+    D3: applicable              # judge confidence
+    proposed_rule: "report P/R/F1 at the operating point for all detectors; report AUPRC only for D2 and D3"
+
+reliability_triad:
+  members: [truth_accuracy, pscr, abstention_rate]
+  never_collapsed: true
+  companion_figure: "2x2 accuracy x consistency matrix"

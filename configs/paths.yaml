@@ -1,0 +1,34 @@
+# Canonical path layout. Resolved by src/semintegrity/utils/paths.py.
+# Override the root with the SEMINT_ROOT environment variable.
+root: "."
+data:
+  raw:            data/raw
+  interim:        data/interim
+  processed:      data/processed
+  benchmark:      data/benchmark
+  benchmark_dev:  data/benchmark/dev
+  benchmark_test: data/benchmark/test
+  benchmark_pilot: data/benchmark/pilot
+  benchmark_saturation: data/benchmark/saturation
+  annotations:    data/annotations
+  wikidata_cache: data/raw/wikidata_cache
+  literature:     data/raw/literature
+results:
+  raw:            results/raw
+  canonicalized:  results/canonicalized
+  detectors:      results/detectors
+  analysis:       results/analysis
+  figures:        results/figures
+  manifests:      results/manifests
+logs:             logs
+slurm_logs:       slurm/logs
+
+immutability:
+  # Enforced by src/semintegrity/utils/io.py: writing into these paths uses
+  # create-exclusive mode. An existing file is NEVER silently overwritten.
+  append_only_or_create_exclusive:
+    - results/raw
+    - data/benchmark/test
+    - results/detectors/d3/raw
+  frozen_after_phase_5:
+    - data/benchmark/test

@@ -1,8 +1,8 @@
 # PROJECT_STATUS
 
 **Project:** SemIntegrity — Measuring Semantic Self-Inconsistency in LLMs Across Structured Integrity Constraints
-**Last updated:** 2026-09-11 (session 2)
-**Current phase:** Phase 1 (representation infrastructure) — *infrastructure complete and tested; pilot constraint CONTENT not yet authored*
+**Last updated:** 2026-09-11 (session 3)
+**Current phase:** Phase 0 complete · Phase 1 infrastructure complete · **Phase −1 awaiting the cluster probe** · one-model pilot stack ready
 
 > This file is the live state of the project. It is updated at the end of every
 > working session. Nothing is marked complete that has not actually been done
@@ -15,10 +15,10 @@
 | Phase | Name | Status | Gate |
 |---|---|---|---|
 | −1 | Infrastructure reconnaissance | **NOT STARTED** — needs cluster access | env test + smoke job pass |
-| 0 | Literature verification | **NOT STARTED** | every citation VERIFIED |
+| 0 | Literature verification | **COMPLETE** — 12/12 resolved | every citation VERIFIED |
 | 1 | Constraint representation + 12 pilot constraints | **INFRASTRUCTURE DONE** · content pending | predicates execute; ground truth resolves |
-| 2 | Pipeline implementation | **NOT STARTED** | pipeline runs end to end |
-| 3 | Pilot (12×5×3) | **NOT STARTED** | go/no-go criteria |
+| 2 | Pipeline implementation | **PARTIAL** — Stage 0, D1, inference done; D2/D3/D4 pending | pipeline runs end to end |
+| 3 | Pilot — reduced to **1 model** on advice | **READY TO RUN** — blocked on cluster probe + constraint approval | go/no-go criteria |
 | 4 | Preregistration preparation | **NOT STARTED** | **researcher submits to OSF** |
 | 5 | Full benchmark (120 constraints) | **NOT STARTED** | benchmark frozen |
 | 6 | Full inference | **NOT STARTED** | provenance verified |
@@ -87,20 +87,47 @@ instructed.
 **Deliverable:** `docs/HUMAN_EFFORT_BUDGET.md` — exact breakdown, **5,721 judgements**
 (corrects the earlier ~4,500 undercount), ≈125 hours, ≈31 of them the second annotator's.
 
+
+### Session 3 — 2026-09-11 · Phase 0 + one-model pilot stack
+
+**Phase 0 literature verification: COMPLETE.** All 12 works in Appendix A.3
+resolved against ACL Anthology / OpenReview / PMLR / arXiv. 7 verified as cited,
+4 venue corrections, 1 downgraded to preprint. Table:
+`docs/phase0/literature_verification.md`; evidence: `data/raw/literature/`.
+
+**All 9 model revisions pinned to real, Hub-verified SHAs** (7 evaluated + 2
+judges). No hash was written by hand. `microsoft/phi-4` and
+`allenai/OLMo-2-1124-13B-Instruct` confirmed to exist and to be ungated, closing
+the ADR-0008 verification item.
+
+**One-model pilot stack built and tested:** chat-template rendering with
+system-role merging, 22-field provenance capture, vLLM + stub backends,
+resumable runner, Stage 0 canonicaliser, D1, and three CLI entry points.
+
+**Verified:** `pytest -q` → **206 passed** · `ruff check` → clean · `make check`
+→ passes · `scripts/demo_pipeline.py` → full workflow end to end with no GPU.
+
+**Bugs caught by tests this session:**
+* the resume key never resolved — `model_id` lives inside `provenance`, so
+  every resumed cluster job would have crashed on its second submission;
+* a SHA I hand-wrote into the runbook diverged from the real one after 12
+  characters. Corrected, and `test_no_hand_written_revision_hashes_in_docs`
+  now fails the suite on any SHA in the docs that matches no pinned config.
+
 ---
 
 ## Pending — immediate next steps
 
 | # | Task | Blocked by |
 |---|---|---|
-| 1 | **Approve Q21** — polarity inside vs outside the equivalence key | **researcher** — blocks probe authoring |
-| 2 | **Approve Q22** — which D0 verdict is "D0" in the paper | **researcher** — both implemented |
-| 3 | Approve pending methodology ADRs 0002, 0003, 0004, 0006 | **researcher** |
-| 4 | Run `scripts/cluster/probe_cluster.sh` | **researcher** — unblocks 14 of 16 markers |
-| 5 | Accept HF licences; create a read token | **HUMAN-ONLY** (Q14) |
-| 6 | Draft 12 pilot constraints → **present for approval before freezing** | me, then researcher |
-| 7 | Phase 0 literature sweep | *unblocked* |
-| 8 | Identify the second annotator (~31 h commitment) | **researcher** (Q9) |
+| 1 | Run the cluster probe (`docs/CLUSTER_RUNBOOK.md` step 1) | **researcher** — unblocks 14 of 16 markers |
+| 2 | Send me the probe report; I configure `cluster.yaml` | researcher, then me |
+| 3 | Cache Qwen2.5-3B weights (~6 GB, ungated, no token needed) | researcher, login node |
+| 4 | `00_env_test` → `10_smoke_inference` | researcher, Slurm |
+| 5 | **Approve Q21** (polarity in the equivalence key) | **researcher** — blocks probe authoring |
+| 6 | **Approve Q22** (which D0 verdict is "D0") | **researcher** |
+| 7 | Draft 12 pilot constraints → present for approval | me, then researcher |
+| 8 | Identify the second annotator (~31 h) | **researcher** (Q9) |
 
 ## Blockers
 
@@ -162,11 +189,11 @@ Claims made in this repository that are **not yet** backed by a real artefact:
 
 | Claim | Status |
 |---|---|
-| Model revision hashes | **unpinned** (`revision: null`) — never fabricated; resolved by `scripts/models/pin_revisions.py` |
-| Judge model Hub ids (`microsoft/phi-4`, `allenai/OLMo-2-1124-13B-Instruct`) | **selected, not yet verified against the Hub** — `status: SELECTED_PENDING_HUB_VERIFICATION` |
+| Model revision hashes | **RESOLVED** — all 9 pinned to real Hub SHAs and re-verified |
+| Judge model Hub ids | **RESOLVED** — both exist, both ungated |
+| Literature verification | **RESOLVED** for the 12 cited works; the systematic sweep for *unknown* prior work is still outstanding |
 | Cluster partitions / GPUs / quota | **UNKNOWN** — no guesses written anywhere |
 | torch / vLLM versions | **unpinned** — depend on the cluster CUDA version |
-| Literature verification | **not started** — no citation is asserted as verified |
 | Any experimental result | **none exist** |
 | Any human annotation | **none exist** |
 | Pilot constraint content | **not authored** — infrastructure only; content goes to the researcher for approval before it is treated as benchmark data |

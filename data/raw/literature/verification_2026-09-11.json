@@ -1,0 +1,134 @@
+{
+  "retrieved_at": "2026-09-11T15:57:24.224965+00:00",
+  "method": "web search + ACL Anthology / OpenReview / PMLR / arXiv lookups; row 10 additionally verified by extracting the published PDF text locally",
+  "n_rows": 12,
+  "rows": [
+    {
+      "n": 1,
+      "key": "elazar2021pararel",
+      "cited": "TACL 2021",
+      "verified_venue": "TACL",
+      "verified_year": 2021,
+      "id": "2021.tacl-1.60",
+      "url": "https://aclanthology.org/2021.tacl-1.60/",
+      "status": "VERIFIED",
+      "note": "erratum at 2021.tacl-1.83 should be cited alongside"
+    },
+    {
+      "n": 2,
+      "key": "kassner2021beliefbank",
+      "cited": "EMNLP 2021",
+      "verified_venue": "EMNLP",
+      "verified_year": 2021,
+      "id": "2021.emnlp-main.697",
+      "url": "https://aclanthology.org/2021.emnlp-main.697/",
+      "status": "VERIFIED"
+    },
+    {
+      "n": 3,
+      "key": "mitchell2022concord",
+      "cited": "2022",
+      "verified_venue": "EMNLP",
+      "verified_year": 2022,
+      "id": "2022.emnlp-main.115",
+      "url": "https://aclanthology.org/2022.emnlp-main.115/",
+      "status": "CORRECTED",
+      "note": "venue was unstated in the proposal"
+    },
+    {
+      "n": 4,
+      "key": "manakul2023selfcheckgpt",
+      "cited": "EMNLP 2023",
+      "verified_venue": "EMNLP",
+      "verified_year": 2023,
+      "id": "2023.emnlp-main.557",
+      "url": "https://aclanthology.org/2023.emnlp-main.557/",
+      "status": "VERIFIED"
+    },
+    {
+      "n": 5,
+      "key": "mundler2024selfcontradiction",
+      "cited": "2023",
+      "verified_venue": "ICLR",
+      "verified_year": 2024,
+      "id": "arXiv:2305.15852",
+      "url": "https://arxiv.org/abs/2305.15852",
+      "status": "CORRECTED",
+      "note": "2023 is the preprint year; published ICLR 2024"
+    },
+    {
+      "n": 6,
+      "key": "berglund2024reversal",
+      "cited": "2023",
+      "verified_venue": "ICLR",
+      "verified_year": 2024,
+      "id": "arXiv:2309.12288",
+      "url": "https://arxiv.org/abs/2309.12288",
+      "status": "CORRECTED",
+      "note": "2023 is the preprint year; published ICLR 2024"
+    },
+    {
+      "n": 7,
+      "key": "logiconbench2026",
+      "cited": "ICLR 2026",
+      "verified_venue": "ICLR",
+      "verified_year": 2026,
+      "id": "OpenReview:ULEHJkolxB",
+      "url": "https://openreview.net/pdf?id=ULEHJkolxB",
+      "status": "VERIFIED"
+    },
+    {
+      "n": 8,
+      "key": "chaosbenchlogic",
+      "cited": "(unstated)",
+      "verified_venue": "arXiv/OpenReview preprint",
+      "verified_year": 2026,
+      "id": "arXiv:2605.24305",
+      "url": "https://arxiv.org/abs/2605.24305",
+      "status": "PREPRINT",
+      "note": "no confirmed peer-reviewed venue; describe as preprint in related work"
+    },
+    {
+      "n": 9,
+      "key": "liu2025repair",
+      "cited": "(unstated)",
+      "verified_venue": "ICML",
+      "verified_year": 2025,
+      "id": "arXiv:2410.02205",
+      "url": "https://proceedings.mlr.press/v267/liu25u.html",
+      "status": "CORRECTED"
+    },
+    {
+      "n": 10,
+      "key": "tsujimura2026belief",
+      "cited": "ACL 2026",
+      "verified_venue": "ACL",
+      "verified_year": 2026,
+      "id": "2026.acl-long.1860",
+      "url": "https://aclanthology.org/2026.acl-long.1860/",
+      "status": "VERIFIED",
+      "note": "JSD use CONFIRMED from paper text: L_instance = 1 - JSD(p_prior||p_posterior), citing Lin 1991. Distributions are prior-vs-posterior scenario tendencies from sampled counts, NOT paraphrase log-prob distributions over a closed candidate set. Paper states it measures tendencies 'rather than computing log probabilities over a pre-defined answer set'."
+    },
+    {
+      "n": 11,
+      "key": "hejabi2026flipflop",
+      "cited": "ACL 2026",
+      "verified_venue": "ACL",
+      "verified_year": 2026,
+      "id": "2026.acl-long.71",
+      "url": "https://aclanthology.org/2026.acl-long.71.pdf",
+      "status": "VERIFIED",
+      "note": "contribution is F2C, an unsupervised TRAINING method for robustness, not a measurement study"
+    },
+    {
+      "n": 12,
+      "key": "mi2026laab",
+      "cited": "ACL 2026",
+      "verified_venue": "ACL",
+      "verified_year": 2026,
+      "id": "2026.acl-long.286",
+      "url": "https://aclanthology.org/2026.acl-long.286/",
+      "status": "VERIFIED"
+    }
+  ]
+}

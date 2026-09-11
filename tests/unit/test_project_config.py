@@ -124,3 +124,35 @@ def test_unresolved_scanner_finds_markers_and_ignores_literal_values():
         "cluster.hostname = UNKNOWN",
         "cluster.nested.gpu = UNPROBED",
     }
+
+
+def test_no_hand_written_revision_hashes_in_docs():
+    """Every 40-hex SHA in the docs must match a pinned config revision.
+
+    A hash typed by hand is a fabricated provenance claim even when it looks
+    right, so the docs may only quote hashes that the pinning script resolved.
+    """
+    import re
+
+    import yaml
+
+    from semintegrity.utils.paths import p, project_root
+
+    pinned = set()
+    for f in p("configs/models").glob("*.yaml"):
+        cfg = yaml.safe_load(f.read_text(encoding="utf-8"))
+        for value in (cfg.get("revision"), *(
+            (cfg.get(k) or {}).get("revision") for k in ("primary_judge", "reproducibility_judge")
+        )):
+            if isinstance(value, str):
+                pinned.add(value)
+
+    offenders = []
+    for doc in p("docs").rglob("*.md"):
+        for m in re.finditer(r"\b[0-9a-f]{40}\b", doc.read_text(encoding="utf-8")):
+            if m.group() not in pinned:
+                offenders.append(f"{doc.relative_to(project_root())}: {m.group()}")
+    assert not offenders, (
+        "documentation contains SHA-like strings that match no pinned revision — "
+        f"these are fabricated unless resolved from the Hub: {offenders}"
+    )

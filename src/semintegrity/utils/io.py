@@ -86,16 +86,30 @@ def read_jsonl(path: str | Path, *, tolerate_truncated_tail: bool = True) -> Ite
             raise
 
 
+def _dig(record: dict[str, Any], dotted: str) -> Any:
+    """Look up a possibly nested field by dotted path, e.g. ``provenance.model_id``."""
+    node: Any = record
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            raise KeyError(dotted)
+        node = node[part]
+    return node
+
+
 def completed_keys(path: str | Path, key_fields: list[str]) -> set[tuple]:
     """Keys already present in a result file, for resume.
 
-    Returns a set of tuples in ``key_fields`` order. A record missing any key
-    field is a schema violation and raises.
+    ``key_fields`` may use dotted paths for nested fields (``provenance.model_id``),
+    because the identity of a generation is split between the record and its
+    provenance block. Returns a set of tuples in ``key_fields`` order.
+
+    A record missing any key field raises: resuming against a file whose shape
+    is not understood would silently re-run or silently skip work.
     """
     seen: set[tuple] = set()
     for rec in read_jsonl(path):
         try:
-            seen.add(tuple(rec[f] for f in key_fields))
+            seen.add(tuple(_dig(rec, f) for f in key_fields))
         except KeyError as exc:
             raise KeyError(f"record in {path} is missing resume key field {exc}") from exc
     return seen

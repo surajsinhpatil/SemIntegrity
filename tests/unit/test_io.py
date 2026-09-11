@@ -60,3 +60,26 @@ def test_missing_resume_key_is_an_error_not_a_skip(tmp_path):
     append_jsonl(target, [{"model_id": "m"}])
     with pytest.raises(KeyError):
         completed_keys(target, ["model_id", "probe_id"])
+
+
+def test_completed_keys_supports_dotted_paths(tmp_path):
+    """Resume keys span the record and its nested provenance block."""
+    target = tmp_path / "r.jsonl"
+    append_jsonl(
+        target,
+        [
+            {"experiment_id": "e", "probe_id": "K-C1-GEO-01-P01",
+             "provenance": {"model_id": "m", "sample_index": 0}},
+        ],
+    )
+    done = completed_keys(
+        target, ["experiment_id", "provenance.model_id", "probe_id", "provenance.sample_index"]
+    )
+    assert ("e", "m", "K-C1-GEO-01-P01", 0) in done
+
+
+def test_dotted_path_miss_raises_rather_than_skipping(tmp_path):
+    target = tmp_path / "r.jsonl"
+    append_jsonl(target, [{"experiment_id": "e", "provenance": {}}])
+    with pytest.raises(KeyError, match="provenance.model_id"):
+        completed_keys(target, ["experiment_id", "provenance.model_id"])

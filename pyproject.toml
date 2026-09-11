@@ -77,6 +77,11 @@ ignore = [
 "src/semintegrity/detectors/d0/predicates/*.py" = ["ARG002"]
 # `_no_order` must match the comparison-operator signature it replaces.
 "src/semintegrity/schemas/enums.py" = ["ARG002"]
+# The curly quotes here are the characters being normalised away, not typos.
+"src/semintegrity/canonicalization/canonicaliser.py" = ["RUF001"]
+# Backends must match the Backend protocol signature whether or not they use
+# every argument; the stub deliberately ignores sampling parameters.
+"src/semintegrity/inference/backend.py" = ["ARG002"]
 
 [tool.mypy]
 python_version = "3.10"

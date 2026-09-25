@@ -1,0 +1,23 @@
+model_id: meta-llama/Llama-3.3-70B-Instruct
+short_name: llama33-70b
+family: llama
+params_b: 70
+role: "Large-model ceiling check — NOT on the scale axis"
+# --- Pinning ---------------------------------------------------------------
+revision: 6f6073b423013f6a7d4d9f39144961bfbfbc386b
+revision_pinned_at: 2026-09-11
+weights_bf16_gb_estimate: 141
+# --- Access ----------------------------------------------------------------
+gated_on_hf: true           # if true: HUMAN must accept the licence on huggingface.co
+# --- Chat template ---------------------------------------------------------
+# These two fields are ASSUMED from documentation and MUST be verified by
+# scripts/models/audit_chat_templates.py before the pilot. The audit writes the
+# verified value plus chat_template_hash into results/manifests/.
+supports_system_role: true
+system_merge_strategy: none   # used only when supports_system_role is false
+chat_template_hash: null    # filled by the audit; logged with every response
+# --- Serving ---------------------------------------------------------------
+serving:
+  tensor_parallel_size: 2
+  gpu_memory_utilization: 0.90
+  max_model_len: 2048

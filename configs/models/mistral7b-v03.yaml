@@ -1,0 +1,23 @@
+model_id: mistralai/Mistral-7B-Instruct-v0.3
+short_name: mistral7b-v03
+family: mistral
+params_b: 7
+role: "Cross-family comparison"
+# --- Pinning ---------------------------------------------------------------
+revision: c170c708c41dac9275d15a8fff4eca08d52bab71
+revision_pinned_at: 2026-09-11
+weights_bf16_gb_estimate: 15
+# --- Access ----------------------------------------------------------------
+gated_on_hf: true           # if true: HUMAN must accept the licence on huggingface.co
+# --- Chat template ---------------------------------------------------------
+# These two fields are ASSUMED from documentation and MUST be verified by
+# scripts/models/audit_chat_templates.py before the pilot. The audit writes the
+# verified value plus chat_template_hash into results/manifests/.
+supports_system_role: false
+system_merge_strategy: prepend_to_first_user   # used only when supports_system_role is false
+chat_template_hash: null    # filled by the audit; logged with every response
+# --- Serving ---------------------------------------------------------------
+serving:
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.90
+  max_model_len: 2048

@@ -1,0 +1,23 @@
+model_id: meta-llama/Llama-3.1-8B-Instruct
+short_name: llama31-8b
+family: llama
+params_b: 8
+role: "Cross-family comparison"
+# --- Pinning ---------------------------------------------------------------
+revision: 0e9e39f249a16976918f6564b8830bc894c89659
+revision_pinned_at: 2026-09-11
+weights_bf16_gb_estimate: 16
+# --- Access ----------------------------------------------------------------
+gated_on_hf: true           # if true: HUMAN must accept the licence on huggingface.co
+# --- Chat template ---------------------------------------------------------
+# These two fields are ASSUMED from documentation and MUST be verified by
+# scripts/models/audit_chat_templates.py before the pilot. The audit writes the
+# verified value plus chat_template_hash into results/manifests/.
+supports_system_role: true
+system_merge_strategy: none   # used only when supports_system_role is false
+chat_template_hash: null    # filled by the audit; logged with every response
+# --- Serving ---------------------------------------------------------------
+serving:
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.90
+  max_model_len: 2048

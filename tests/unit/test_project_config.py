@@ -156,3 +156,44 @@ def test_no_hand_written_revision_hashes_in_docs():
         "documentation contains SHA-like strings that match no pinned revision — "
         f"these are fabricated unless resolved from the Hub: {offenders}"
     )
+
+
+def test_no_source_directory_is_hidden_by_gitignore():
+    """Every configs/ and scripts/ file must be visible to git.
+
+    Regression test for a real bug: an unanchored `models/` rule in .gitignore,
+    meant to keep model weights out of the repository, also matched
+    `configs/models/` and `scripts/models/`. All seven model configs — including
+    the pinned revisions — were silently untracked for several commits. A rule
+    intended to exclude weights was excluding source instead.
+    """
+    import subprocess
+
+    from semintegrity.utils.paths import project_root
+
+    root = project_root()
+    if not (root / ".git").exists():  # pragma: no cover - non-git checkouts
+        import pytest
+
+        pytest.skip("not a git checkout")
+
+    candidates = [
+        str(p.relative_to(root))
+        for d in ("configs", "scripts", "src", "tests")
+        for p in (root / d).rglob("*")
+        if p.is_file() and p.suffix in {".py", ".yaml", ".yml", ".sh", ".txt", ".in"}
+    ]
+    assert candidates, "found no source files to check"
+
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin"],
+        input="\n".join(candidates),
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    hidden = [line for line in result.stdout.splitlines() if line.strip()]
+    assert not hidden, (
+        "these source files are excluded by .gitignore and would never be "
+        f"committed: {hidden}"
+    )

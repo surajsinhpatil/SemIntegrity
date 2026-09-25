@@ -1,0 +1,23 @@
+model_id: Qwen/Qwen2.5-7B-Instruct
+short_name: qwen25-7b
+family: qwen
+params_b: 7
+role: "Cross-family comparison; shared anchor of scale axis"
+# --- Pinning ---------------------------------------------------------------
+revision: a09a35458c702b33eeacc393d103063234e8bc28
+revision_pinned_at: 2026-09-11
+weights_bf16_gb_estimate: 16
+# --- Access ----------------------------------------------------------------
+gated_on_hf: false           # if true: HUMAN must accept the licence on huggingface.co
+# --- Chat template ---------------------------------------------------------
+# These two fields are ASSUMED from documentation and MUST be verified by
+# scripts/models/audit_chat_templates.py before the pilot. The audit writes the
+# verified value plus chat_template_hash into results/manifests/.
+supports_system_role: true
+system_merge_strategy: none   # used only when supports_system_role is false
+chat_template_hash: null    # filled by the audit; logged with every response
+# --- Serving ---------------------------------------------------------------
+serving:
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.90
+  max_model_len: 2048

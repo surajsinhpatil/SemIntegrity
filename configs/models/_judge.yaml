@@ -1,0 +1,91 @@
+# ===========================================================================
+# D3 LLM judge (proposal §4.8.5)
+# HARD CONSTRAINT: the judge must be EXTERNAL to all seven evaluated models,
+# i.e. its lineage must not touch {llama, mistral, qwen, gemma}.
+#
+# DECIDED 2026-09-11 (researcher): open-weight judge. See ADR-0008.
+# Consequence: the whole detection stack becomes reproducible from pinned
+# weights, no API credentials are needed, and the ~23.5k-judgement cost moves
+# from a budget line to ~2 GPU-hours on the existing cluster allocation.
+# ===========================================================================
+status: SELECTED_AND_HUB_VERIFIED   # ids confirmed on the Hub 2026-09-11; both ungated
+
+primary_judge:
+  model_id: microsoft/phi-4
+  provider: local_openweight
+  family: phi
+  params_b: 14
+  revision: 2db69c1c3e91a05d2c64a3185acfbaf36f744e25
+  revision_pinned_at: 2026-09-11
+  dtype: bfloat16
+  weights_bf16_gb_estimate: 29
+  serving: { tensor_parallel_size: 1, gpu_memory_utilization: 0.90, max_model_len: 4096 }
+  rationale: >-
+    Independent lineage (Microsoft), outside all four evaluated families, strong
+    instruction-following and structured-output adherence for its size, fits one
+    40 GB GPU in bf16, permissive licence, and pinnable to an exact revision.
+  verification_required:
+    - "confirm the exact Hub id and that the repository resolves"
+    - "pin the revision SHA before any judging run"
+    - "dev-split judge-vs-human agreement must be non-degenerate (pilot criterion NONDEGEN)"
+
+reproducibility_judge:        # second, independent open-weight family
+  model_id: allenai/OLMo-2-1124-13B-Instruct
+  family: olmo
+  revision: 3a5c85baefbb1896a54d56fe2e76c0395627ddf4
+  revision_pinned_at: 2026-09-11
+  subset_fraction: 0.15
+  rationale: >-
+    §4.8.5 pairs the primary judge with a second judge on a stratified subset as
+    a reproducibility check. With an open-weight PRIMARY judge this role becomes
+    a CROSS-FAMILY AGREEMENT check rather than an open-vs-closed check; a second
+    independent lineage preserves its purpose.
+  verification_required: ["confirm the exact Hub id", "pin the revision SHA"]
+
+# --- LINEAGE CONTAMINATION TRAP --------------------------------------------
+# Several otherwise-attractive open-weight judges are DISQUALIFIED because they
+# are built on an evaluated family's base model. "Different organisation" is
+# NOT the test; shared lineage is.
+disqualified:
+  - { id: "DeepSeek-R1-Distill-Qwen-*",  reason: "Qwen base — inside an evaluated family" }
+  - { id: "DeepSeek-R1-Distill-Llama-*", reason: "Llama base — inside an evaluated family" }
+  - { id: "nvidia/Llama-*-Nemotron-*",   reason: "Llama base — inside an evaluated family" }
+  - { id: "any Qwen/Mistral/Gemma/Llama fine-tune", reason: "shared lineage with an evaluated model" }
+  - { id: "CohereLabs Command-R (CC-BY-NC)", reason: "non-commercial licence conflicts with the release plan (§5.6)" }
+acceptable_alternatives:      # if Phi-4 underperforms on the dev split
+  - { id: "ibm-granite/granite-3.x-instruct", reason: "independent lineage, Apache-2.0" }
+  - { id: "allenai/OLMo-2-*-Instruct",        reason: "independent lineage, fully open" }
+
+# --- Cost / compute ---------------------------------------------------------
+workload:
+  primary_pairs_per_constraint: 28
+  constraints: 120
+  models: 7
+  judgements_primary_max: 23520      # upper bound, before ABSTAIN filtering
+  stability_subset_repeats: 3
+  saturation_tier: excluded          # §4.8.5 cost control: D0 + D2 only
+  api_cost: 0                        # open-weight
+  estimated_gpu_hours: "~2-4 on one 40GB GPU with vLLM batching (to be measured at pilot)"
+  note: >-
+    Only pairs where BOTH responses canonicalise to an ANSWER are evaluable, so
+    the realised count is lower and is not knowable until Phase 6.
+
+protocol:
+  single_shot: true                  # like-for-like with D1/D2 (§4.8.5)
+  randomise_ab_order: true
+  archive_raw_judgements: true
+  decoding: { temperature: 0.0, top_p: 1.0, seed: 20250058, max_new_tokens: 256 }
+  stability:
+    stratified_subset: true
+    repeats: 3
+    randomise_order_each_repeat: true
+  family_affinity_check:
+    enabled: true
+    compare: [qwen_generated_responses, non_qwen_generated_responses]
+    note: >-
+      Still required. An open-weight judge has no Qwen lineage, but the check
+      measures rather than assumes that, which is what §4.8.5 asks for.
+
+output_schema:
+  label: [CONTRADICTION, COMPATIBLE, UNCLEAR]
+  fields: [label, confidence, conflicting_span_a, conflicting_span_b, reason]

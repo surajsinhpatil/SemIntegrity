@@ -1,0 +1,35 @@
+model_id: google/gemma-2-9b-it
+short_name: gemma2-9b
+family: gemma
+params_b: 9
+role: "Cross-family comparison (replaces closed-source M5)"
+# --- Pinning ---------------------------------------------------------------
+revision: 11c9b309abf73637e4b6f9a3fa1e92e615547819
+revision_pinned_at: 2026-09-11
+weights_bf16_gb_estimate: 19
+# --- Access ----------------------------------------------------------------
+gated_on_hf: true           # if true: HUMAN must accept the licence on huggingface.co
+# --- Chat template ---------------------------------------------------------
+# These two fields are ASSUMED from documentation and MUST be verified by
+# scripts/models/audit_chat_templates.py before the pilot. The audit writes the
+# verified value plus chat_template_hash into results/manifests/.
+supports_system_role: false
+system_merge_strategy: prepend_to_first_user   # used only when supports_system_role is false
+chat_template_hash: null    # filled by the audit; logged with every response
+# --- Serving ---------------------------------------------------------------
+serving:
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.90
+  max_model_len: 2048
+# --- Gemma-2 hazard (§4.6) -------------------------------------------------
+# Gemma-2 uses attention logit soft-capping + sliding-window attention. Some
+# FlashAttention-2 / vLLM builds silently drop soft-capping and degrade output.
+# Silent degradation is INDISTINGUISHABLE from high model inconsistency, which
+# would invalidate this model's arm of the study.
+hazard:
+  requires_logit_softcapping: true
+  requires_sliding_window_attention: true
+  # Gate: a known-good reference comparison must PASS before the main run.
+  preflight_gate: scripts/models/gemma2_softcap_check.py
+  preflight_status: NOT_RUN
+  blocked_until_preflight_passes: true

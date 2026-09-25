@@ -70,9 +70,13 @@ htmlcov/
 notebooks/**/*.ipynb_checkpoints
 
 # --- Model weights / HF caches (NEVER commit: hundreds of GB) ---------------
-models/
-hf_cache/
-.cache/
+# ANCHORED with a leading slash. An unanchored `models/` matches ANY directory
+# called models at ANY depth, which silently excluded configs/models/ (all seven
+# model configs, with their pinned revisions) and scripts/models/. A rule meant
+# to keep weights out of git was quietly keeping source out instead.
+/models/
+/hf_cache/
+/.cache/
 *.safetensors
 *.bin
 *.gguf

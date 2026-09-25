@@ -2,7 +2,7 @@
 
 **Kind:** METHODOLOGY
 
-**Status:** ACCEPTED — researcher instruction, 2026-09-25
+**Status:** SUPERSEDED by ADR-0015, 2026-09-25 — the 0.19.1 wheel is manylinux_2_31 and the cluster runs glibc 2.28
 **Date:** 2026-09-25
 **Supersedes:** ADR-0012
 

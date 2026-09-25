@@ -102,16 +102,19 @@ gpus:
 storage:
   status: PROBED
   filesystem: "/dev/sdb1 mounted at /nfs_home (24 TB, 31% used)"
-  quota_used_gb: 687
+  quota_used_gb: 713          # re-measured 2026-09-25; was 687, labmates are consuming it
   quota_soft_gb: 999
   quota_hard_gb: 1000
-  headroom_gb: 313
+  headroom_gb: 286            # 713 of 1000 GB hard limit, SHARED across the account
   quota_is_shared: true
   quota_warning: >-
-    The 687 GB already used belongs to the WHOLE shared account. ~313 GB of
-    headroom against a 1 TB hard limit. All seven models in bf16 are ~244 GB,
-    which fits but leaves little margin and would crowd out labmates. STAGE
-    models one at a time and evict rather than caching all seven at once.
+    The 713 GB already used belongs to the WHOLE shared account: ~286 GB of
+    headroom against a 1 TB hard limit, re-measured 2026-09-25. All seven models
+    in bf16 are ~244 GB, so they fit only on paper — that would leave ~42 GB for
+    everyone else on the account and risk hitting the hard limit mid-run. STAGE
+    models one at a time and EVICT; never cache all seven at once. Note `df`
+    reports 16 TB free on /nfs_home, which is the filesystem, not the limit that
+    binds: the quota is what stops a job.
   # Weights needed if all 7 models are cached in bf16 (estimates):
   #   3B ~7 + 7B ~16 + 7B ~15 + 8B ~16 + 9B ~19 + 14B ~30 + 70B ~141  =  ~244 GB
   estimated_weights_gb: 244
@@ -119,6 +122,18 @@ storage:
   note: "weights are cached ONCE from a non-GPU session, never inside GPU time (§4.13)"
 
 software:
+  # VERIFIED on the login node, 2026-09-25. glibc is the constraint that decided
+  # the inference stack: it rules out every CUDA-12 vLLM from 0.12.0 onward,
+  # because those ship manylinux_2_31 wheels. See ADR-0015.
+  os: "Rocky Linux 8.10 (Green Obsidian)"
+  os_family: "rhel8"
+  kernel: "4.18.0-553.el8_10.x86_64"
+  glibc: "2.28"
+  glibc_consequence: >-
+    manylinux_2_31 wheels (vllm 0.12.0-0.19.1, the CUDA-12 line) will NOT
+    install. The only CUDA-12 vLLM wheels this host accepts are the manylinux1
+    line, 0.11.2 and below. ADR-0013's 0.19.1 pin was unexecutable here.
+
   # Observed in the login banner, 2026-09-25. Full list still needs `module avail`.
   module_system: lmod                  # Lmod 8.7.65
   available_modules:
@@ -151,14 +166,36 @@ software:
         torch==2.13.0, whose default PyPI wheel is cu130. The mismatch is
         invisible on the login node and only appears on a GPU node.
 
-  installed_stack:
-    python: "3.11"
-    torch: "2.11.0+cu128"
+  # Observed state BEFORE repair, 2026-09-25. This environment is broken: it
+  # carries BOTH CUDA lineages side by side (nvidia-cublas 13.1.1.3 alongside
+  # nvidia-cublas-cu12 12.8.4.1, nccl-cu12 alongside nccl-cu13, ...), wreckage
+  # from the 0.30.0 and 0.26.0 attempts.
+  observed_stack_before_repair:
+    python: "3.11.16"
+    torch: "2.11.0+cu128"          # CUDA 12 — fine
     torchvision: "0.26.0+cu128"
     torchaudio: "2.11.0+cu128"
-    vllm: "UNUSABLE"      # every wheel >=0.22 links libcudart.so.13; driver is CUDA 12.8
-    inference_stack: transformers   # ADR-0012
     transformers: "5.17.0"
+    vllm: "0.26.0 — UNUSABLE"
+    vllm_evidence: >-
+      Static scan of the installed package on this host, 2026-09-25:
+      16 shared objects scanned, libcudart references {'13': 198}, zero to
+      libcudart.so.12. Confirmed on the artefact, not inferred from metadata.
+    cuda13_root_cause: >-
+      vllm 0.26.0 pulled nvidia-cutlass-dsl (shared with flashinfer-python,
+      quack-kernels and tokenspeed-mla, all its own dependencies), which dragged
+      in the cu13 chain. nvidia-cudnn-cu13 and nvidia-nccl-cu13 are left as
+      orphans with no remaining dependents.
+
+  # The stack ADR-0015 pins. Installed by scripts/cluster/fix_torch_cuda.sh.
+  target_stack:
+    python: "3.11.16"
+    torch: "2.9.0+cu128"           # pinned by vllm 0.11.2; cp311 manylinux_2_28 wheel exists
+    torchvision: "0.24.0+cu128"
+    torchaudio: "2.9.0+cu128"
+    vllm: "0.11.2"                 # last manylinux1 release; links libcudart.so.12
+    transformers: ">=4.56,<5"      # required by vllm 0.11.2
+    inference_stack: vllm          # ADR-0015; ADR-0012 (transformers) was REJECTED
     note: >-
       vLLM is version-pinned deliberately. Letting pip take the newest release
       silently changes the CUDA build, which §4.13 forbids: a single inference

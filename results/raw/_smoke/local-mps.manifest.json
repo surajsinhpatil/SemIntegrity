@@ -1,0 +1,16 @@
+{
+  "experiment_id": "smoke",
+  "model_short_name": "qwen25-3b",
+  "model_id": "Qwen/Qwen2.5-3B-Instruct",
+  "revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "config_sha256": "5a63c12087aae93b8fa6cb8cc69b2af7ed97a93a358bcbb1056ea5b6d811834c",
+  "chat_template_audit": {
+    "chat_template_hash": "cd8e9439f0570856fd70470bf8889ebd8b5d1107207f67a5efb46e342330527f",
+    "declared_supports_system_role": true,
+    "actual_supports_system_role": true,
+    "agrees": true,
+    "error_on_system_role": null
+  },
+  "n_responses": 8,
+  "stub_backend": false
+}

@@ -73,6 +73,11 @@ job_provenance() {
   # ConstrainDevices=no on this cluster: cgroups do NOT fence GPUs between jobs,
   # so the only record of which devices are ours is this variable. Log it.
   echo "CUDA_VISIBLE_DEVICES = ${CUDA_VISIBLE_DEVICES:-unset}"
+  # glibc decides whether the ADR-0013 vLLM 0.19.1 wheel (manylinux_2_31) can
+  # be installed at all, and compute nodes need not match the login node. Record
+  # it on every job so the question is answered by an artefact, never inferred.
+  echo "glibc         : $(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+$' || echo unknown)"
+  echo "os            : $(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}" || echo unknown)"
   echo "start_utc     : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git_commit    : $(git -C "$SEMINT_ROOT" rev-parse HEAD 2>/dev/null || echo 'not-a-git-repo')"
   echo "git_dirty     : $(git -C "$SEMINT_ROOT" status --porcelain 2>/dev/null | wc -l) files"

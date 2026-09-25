@@ -230,23 +230,49 @@ def test_inference_backend_matches_adr_0013():
     )
 
 
-def test_adr_0013_is_still_the_accepted_decision():
+def test_adr_0015_is_still_the_accepted_decision():
     """If the ADR stops being ACCEPTED, the test above must be revisited deliberately.
 
-    The previous version of this guard asked whether ADR-0012 contained
-    "SUPERSEDED" in upper case. The ADR said "superseded" in lower case, so the
-    guard never fired on the very event it existed to catch. Match case-insensitively
-    and assert the positive state rather than the absence of one word.
+    The first version of this guard asked whether ADR-0012 contained "SUPERSEDED"
+    in upper case. The ADR said "superseded" in lower case, so the guard never
+    fired on the very event it existed to catch. Matching case-insensitively and
+    asserting the positive state caught the ADR-0013 -> ADR-0015 supersession
+    immediately, which is the behaviour being preserved here.
     """
     from semintegrity.utils.paths import p
 
-    adr = p("docs/decisions/ADR-0013-vllm-cuda12-pin.md").read_text(encoding="utf-8")
+    adr = p("docs/decisions/ADR-0015-vllm-0112-glibc228.md").read_text(encoding="utf-8")
     status = next(ln for ln in adr.splitlines() if ln.startswith("**Status:**"))
-    assert "ACCEPTED" in status.upper(), f"ADR-0013 is no longer accepted: {status}"
+    assert "ACCEPTED" in status.upper(), f"ADR-0015 is no longer accepted: {status}"
     assert "vllm" in adr.lower()
 
-    superseded = p("docs/decisions/ADR-0012-inference-stack.md").read_text(encoding="utf-8")
-    old_status = next(ln for ln in superseded.splitlines() if ln.startswith("**Status:**"))
-    assert any(w in old_status.upper() for w in ("REJECTED", "SUPERSEDED")), (
-        f"ADR-0012 is no longer rejected; the backend decision must be re-examined: {old_status}"
-    )
+    for superseded_adr in (
+        "docs/decisions/ADR-0012-inference-stack.md",
+        "docs/decisions/ADR-0013-vllm-cuda12-pin.md",
+    ):
+        text = p(superseded_adr).read_text(encoding="utf-8")
+        old = next(ln for ln in text.splitlines() if ln.startswith("**Status:**"))
+        assert any(w in old.upper() for w in ("REJECTED", "SUPERSEDED")), (
+            f"{superseded_adr} is live again; the backend decision must be re-examined: {old}"
+        )
+
+
+def test_the_pinned_inference_stack_matches_adr_0015():
+    """The version pins live in the install script; ADR-0015 is the source of truth.
+
+    A pin that drifts from the ADR is the same class of bug as a config that
+    contradicted it (see 350f89b): the document says one thing and the thing
+    that actually runs says another.
+    """
+    from semintegrity.utils.paths import p
+
+    script = p("scripts/cluster/fix_torch_cuda.sh").read_text(encoding="utf-8")
+    for var, value in (
+        ("VLLM_VERSION", "0.11.2"),
+        ("TORCH_VERSION", "2.9.0"),
+        ("TORCHVISION_VERSION", "0.24.0"),
+        ("TORCHAUDIO_VERSION", "2.9.0"),
+    ):
+        assert f'{var}="{value}"' in script, (
+            f"fix_torch_cuda.sh does not pin {var}={value} as ADR-0015 requires"
+        )

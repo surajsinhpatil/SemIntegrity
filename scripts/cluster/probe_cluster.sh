@@ -70,6 +70,29 @@ run nvidia-smi
 run nvidia-smi --query-gpu=name,memory.total,driver_version,compute_cap --format=csv
 endsec
 
+section "OS and glibc — DECIDES whether vLLM 0.19.1 can be installed at all"
+# ADR-0013 pins vLLM 0.19.1, the newest release linking libcudart.so.12. Its
+# wheel is manylinux_2_31, so it needs glibc >= 2.31. RHEL/Rocky/Alma 8 ship
+# glibc 2.28, and NO CUDA-12 vLLM wheel is built for 2.28 — on such a host the
+# pinned stack cannot be installed from a wheel at all. This was the single
+# largest unknown while the cluster was unreachable, so it is captured first
+# and explicitly rather than inferred later from an install failure.
+run cat /etc/os-release
+run uname -a
+run ldd --version
+printf '\n-- vLLM 0.19.1 wheel compatibility --\n' >>"$OUT"
+GLIBC="$(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+$')"
+if [ -n "$GLIBC" ]; then
+  if [ "$(printf '2.31\n%s\n' "$GLIBC" | sort -V | head -1)" = "2.31" ]; then
+    printf 'glibc %s >= 2.31  -> manylinux_2_31 wheel INSTALLABLE\n' "$GLIBC" >>"$OUT"
+  else
+    printf 'glibc %s <  2.31  -> vLLM 0.19.1 wheel NOT INSTALLABLE. STOP and re-plan.\n' "$GLIBC" >>"$OUT"
+  fi
+else
+  printf 'glibc version could not be determined\n' >>"$OUT"
+fi
+endsec
+
 section "Software environment"
 run module avail
 run module list

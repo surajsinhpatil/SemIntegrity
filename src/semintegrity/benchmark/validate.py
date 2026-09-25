@@ -23,6 +23,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--k", type=int, default=8, help="probes per constraint for this split")
     ap.add_argument("--strict-lattice", action="store_true",
                     help="also enforce the full 120-constraint design lattice (test split only)")
+    ap.add_argument("--strict-d0", action="store_true",
+                    help="treat an unregistered formal_predicate as an error, not a coverage gap")
     args = ap.parse_args(argv)
 
     split = Split(args.split)
@@ -47,8 +49,21 @@ def main(argv: list[str] | None = None) -> int:
     registry = default_registry()
     unregistered = sorted({c.formal_predicate for c in constraints} - set(registry.names()))
     if unregistered:
-        print(f"\n[WARN] {len(unregistered)} predicate(s) not in the D0 registry: {unregistered}")
-        print("       D0 cannot verify these constraints; they count against D0 coverage.")
+        # An unregistered predicate is ambiguous by nature: it is either a
+        # deliberate D0 coverage gap (a legitimate RESULT per §4.8.1) or a typo
+        # that will be silently reported AS a coverage gap. This command is used
+        # as a Slurm preflight gate, so warning and exiting 0 lets the second
+        # case burn an allocation and corrupt a reported coverage number.
+        # --strict-d0 makes the caller state which reading applies; the default
+        # stays a warning so that no existing caller's behaviour changes.
+        stream = sys.stderr if args.strict_d0 else sys.stdout
+        label = "ERROR" if args.strict_d0 else "WARN"
+        print(f"\n[{label}] {len(unregistered)} predicate(s) not in the D0 registry: {unregistered}",
+              file=stream)
+        print("       D0 cannot verify these constraints; they count against D0 coverage.",
+              file=stream)
+        if args.strict_d0:
+            problems.append(f"{len(unregistered)} unregistered D0 predicate(s): {unregistered}")
     else:
         print("[PASS] every formal_predicate resolves in the D0 registry")
 

@@ -87,7 +87,17 @@ gpus:
     80 GB per GPU is ample: every model up to 14B fits on ONE A100 in bf16 with
     room for KV cache. Llama-3.3-70B at ~141 GB needs 2 GPUs (tensor_parallel_size=2),
     which fits within the account's gres/gpu=3 limit.
-  bf16_supported: ASSUMED_YES   # A100 supports bf16; VERIFY in the env test
+  bf16_supported: true          # A100 — confirmed by hardware class; re-asserted in the env test
+  driver_version: "570.158.01"  # observed on csis.cn4
+  cuda_runtime_supported: "12.8"
+  observed_free_vram_mib: 81906  # of 81920; only Xorg resident
+  device_isolation_caveat: >-
+    `scontrol show config` reports ConstrainDevices = no, so cgroups do NOT
+    fence GPUs between jobs. nvidia-smi showed BOTH GPUs even though only one
+    was requested. Slurm still sets CUDA_VISIBLE_DEVICES, and vLLM honours it,
+    but a process that ignores that variable could touch a GPU belonging to
+    another job. Every job must therefore log CUDA_VISIBLE_DEVICES and must
+    never enumerate devices directly.
 
 storage:
   status: PROBED
@@ -132,7 +142,17 @@ network:
     "https://query.wikidata.org": "HTTP 200"
     "https://www.wikidata.org": "HTTP 301"
     "https://huggingface.co": "HTTP 200"
-  compute_node_internet: UNKNOWN   # test inside the first allocation
+  compute_node_internet: false     # VERIFIED 2026-09-25 on csis.cn4
+  compute_node_evidence: >-
+    `curl https://huggingface.co` from inside an allocation returned HTTP 000
+    and curl exit code 6 (could not resolve host). DNS does not resolve on
+    compute nodes.
+  compute_node_consequence: >-
+    Confirms the architecture rather than challenging it. Compute jobs already
+    run with HF_HUB_OFFLINE=1 (slurm/templates/_common.sh) and read a FROZEN
+    knowledge-base cache (ADR-0011). Every weight and every KB fact MUST be
+    fetched on the login node first; a job that needs the network will fail,
+    not hang.
   proxy_required: false
   implication: >-
     The login node reaches both Wikidata and Hugging Face, so §4.13's plan holds
@@ -163,16 +183,12 @@ account_limits:
     - "at most 3 GPUs total, so Llama-3.3-70B at tp=2 works but leaves 1 GPU for everyone else"
     - "cpus-per-task summed across running jobs must stay under 64"
 
-  UNVERIFIED_QOS_RISK:
-    status: MUST_TEST_BEFORE_PLANNING_GPU_WORK
-    observation: "the QOS column lists only `cpu-short` and `debug`"
-    question: >-
-      QOS and partition are different things in Slurm, and the gpu-* partitions
-      may or may not be reachable under those QOS entries. GrpTRES grants
-      gres/gpu=3, which implies GPU work is intended — but implication is not
-      permission.
-    test: "srun --partition=gpu-short --gres=gpu:1 --time=00:02:00 nvidia-smi"
-    on_failure: "ask the CSIS admin to add a gpu QOS to the faculty association"
+  qos_gpu_access:
+    status: VERIFIED_WORKING          # 2026-09-25
+    evidence: "srun --partition=gpu-short --gres=gpu:1 nvidia-smi succeeded on csis.cn4"
+    note: >-
+      The QOS column listing only cpu-short/debug does NOT block the gpu-*
+      partitions. Tested rather than assumed.
 
 resource_plan:     # sized against the REAL limits above
   small_models:    # <= 14B, bf16, tp=1 — one A100 80GB is ample

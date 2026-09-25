@@ -47,6 +47,13 @@ env/
 ENV/
 .conda/
 *.conda
+# Cluster environment and its caches — all redirected into the project so the
+# shared account's home stays clean. None of it belongs in git.
+.conda-env/
+.conda-pkgs/
+.pip-cache/
+.cache/
+.tmp/
 
 # --- Testing / tooling ------------------------------------------------------
 .pytest_cache/

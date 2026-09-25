@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# Build the SemIntegrity Python environment on the BITS CSIS cluster.
+#
+# LOGIN NODE ONLY — it needs the internet, and compute nodes have none
+# (verified 2026-09-25: DNS does not resolve there).
+#
+#   bash scripts/cluster/setup_env.sh            # base env (no torch, no vllm)
+#   bash scripts/cluster/setup_env.sh --gpu      # base + torch + vLLM (~10 GB)
+#
+# Shared-account discipline: EVERYTHING lands inside this project directory.
+# conda packages, pip cache, HuggingFace cache and temporary files are all
+# redirected away from /nfs_home/users/yashsinha, which several students share.
+#
+# Idempotent: safe to re-run. It will not rebuild an environment that exists.
+# ---------------------------------------------------------------------------
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ENV_PREFIX="${ROOT}/.conda-env"
+PY_VERSION="3.11"
+
+WITH_GPU=0
+[[ "${1:-}" == "--gpu" ]] && WITH_GPU=1
+
+say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+warn() { printf '\033[33m!!  %s\033[0m\n' "$*" >&2; }
+
+# --- refuse to run inside a compute allocation -----------------------------
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  warn "This is running inside Slurm job ${SLURM_JOB_ID}."
+  warn "Compute nodes have NO internet, so package installation will fail."
+  warn "Run this on the login node instead."
+  exit 2
+fi
+
+say "Project root: ${ROOT}"
+df -h "${ROOT}" | tail -1
+
+# --- keep every cache inside the project ------------------------------------
+export CONDA_PKGS_DIRS="${ROOT}/.conda-pkgs"
+export PIP_CACHE_DIR="${ROOT}/.pip-cache"
+export HF_HOME="${ROOT}/hf_cache"
+export TMPDIR="${ROOT}/.tmp"
+export XDG_CACHE_HOME="${ROOT}/.cache"
+mkdir -p "$CONDA_PKGS_DIRS" "$PIP_CACHE_DIR" "$HF_HOME" "$TMPDIR" "$XDG_CACHE_HOME"
+say "Caches redirected into the project (shared account is left untouched)"
+printf '  CONDA_PKGS_DIRS=%s\n  PIP_CACHE_DIR=%s\n  HF_HOME=%s\n  TMPDIR=%s\n' \
+  "$CONDA_PKGS_DIRS" "$PIP_CACHE_DIR" "$HF_HOME" "$TMPDIR"
+
+# --- conda ------------------------------------------------------------------
+say "Loading miniconda module"
+module load miniconda/default 2>/dev/null || warn "module load failed; trying conda on PATH"
+command -v conda >/dev/null || { warn "conda not found; run 'module avail' and adjust"; exit 3; }
+conda --version
+
+CONDA_BASE="$(conda info --base)"
+# shellcheck disable=SC1091
+source "${CONDA_BASE}/etc/profile.d/conda.sh"
+
+if [[ -d "$ENV_PREFIX" ]]; then
+  say "Environment already exists at ${ENV_PREFIX} — reusing it"
+else
+  say "Creating Python ${PY_VERSION} environment at ${ENV_PREFIX}"
+  # 3.11 deliberately: the system python is 3.6.8 (far too old) and the default
+  # module is 3.13.7 (ahead of what vLLM supports). pyproject pins >=3.10,<3.12.
+  conda create -y -p "$ENV_PREFIX" "python=${PY_VERSION}" pip
+fi
+
+conda activate "$ENV_PREFIX"
+say "Active interpreter"
+python -VV
+which python
+
+# --- project package --------------------------------------------------------
+say "Installing SemIntegrity (login-node dependencies: no torch, no vllm)"
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e "${ROOT}[dev]"
+
+if [[ $WITH_GPU -eq 1 ]]; then
+  say "Installing torch + vLLM (large — expect ~10 GB and several minutes)"
+  # The driver is 570.158.01 / CUDA 12.8, which runs cu12x wheels. vLLM pins its
+  # own torch, so torch is NOT installed separately: letting pip resolve it
+  # avoids a version conflict that would surface only at model-load time.
+  python -m pip install vllm
+  say "Recording the resolved versions"
+  python - <<'PY'
+import importlib
+for m in ("torch", "vllm", "transformers", "tokenizers"):
+    try:
+        mod = importlib.import_module(m)
+        print(f"  {m:14s} {getattr(mod, '__version__', '?')}")
+    except Exception as e:
+        print(f"  {m:14s} MISSING ({type(e).__name__})")
+PY
+fi
+
+# --- lock file --------------------------------------------------------------
+say "Freezing the exact environment"
+mkdir -p "${ROOT}/requirements/lock"
+LOCK="${ROOT}/requirements/lock/cluster-$([[ $WITH_GPU -eq 1 ]] && echo gpu || echo login).txt"
+{
+  echo "# SemIntegrity locked environment"
+  echo "# host      : $(hostname -f)"
+  echo "# generated : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "# python    : $(python -V 2>&1)"
+  echo "# prefix    : ${ENV_PREFIX}"
+  python -m pip freeze
+} > "$LOCK"
+say "Lock file written: ${LOCK#"${ROOT}/"} ($(wc -l < "$LOCK") lines)"
+
+# --- verify -----------------------------------------------------------------
+say "Running the test suite"
+cd "$ROOT"
+python -m pytest -q -m "not gpu and not network" || warn "TESTS FAILED — do not submit jobs yet"
+
+cat <<EOF
+
+$(printf '=%.0s' {1..70})
+Environment ready.
+
+Activate it in any future shell with:
+
+  module load miniconda/default
+  source \$(conda info --base)/etc/profile.d/conda.sh
+  conda activate ${ENV_PREFIX}
+
+Slurm jobs pick it up automatically via:
+
+  export SEMINT_ENV_ACTIVATE=${ENV_PREFIX}
+
+$(printf '=%.0s' {1..70})
+EOF

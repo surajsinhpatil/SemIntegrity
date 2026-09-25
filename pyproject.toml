@@ -7,7 +7,11 @@ name = "semintegrity"
 version = "0.1.0"
 description = "Measuring Semantic Self-Inconsistency in LLMs Across Structured Integrity Constraints"
 readme = "README.md"
-requires-python = ">=3.10,<3.12"
+# Upper bound was <3.12 because vLLM did not support newer interpreters.
+# ADR-0012 dropped vLLM for transformers, which has no such limit, so the bound
+# now only excludes versions nothing has been tested against. The cluster runs
+# 3.11; the development Mac runs 3.13.
+requires-python = ">=3.10,<3.14"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Surajsinh Patil" }]
 keywords = ["llm-evaluation", "consistency", "integrity-constraints", "nlp"]
@@ -20,7 +24,11 @@ dependencies = [
   "pyyaml>=6.0",
   "orjson>=3.9",
   "pandas>=2.1",
-  "numpy>=1.26,<2.1",
+  # Upper bound was <2.1 out of caution during the numpy 2.x transition. It now
+  # does harm: on Python 3.13 there is no prebuilt 2.0.x wheel, so pip tries to
+  # compile numpy from source and fails. scipy 1.16 and pandas 2.3 both work with
+  # numpy 2.3, which is what the cluster and the Mac already have.
+  "numpy>=1.26,<3",
   "pyarrow>=15.0",
   "typer>=0.12",
   "rich>=13.7",

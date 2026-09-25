@@ -79,9 +79,29 @@ for m in ("torch", "vllm", "transformers"):
 PY
 
 say "Checking glibc (vllm ${VLLM_VERSION} ships manylinux1 wheels)"
-GLIBC="$(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$')"
+# Do NOT write `ldd --version | head -1`, and do NOT compare with `sort -V | head -1`.
+# `head` closes the pipe after the line it wants, the writer upstream dies of
+# SIGPIPE, and under `set -o pipefail` that becomes a fatal exit 141. This script
+# failed exactly that way on its first real run (2026-09-25, exit 141 right after
+# the "Checking glibc" banner). Read the output once, then slice and compare in
+# the shell, so there is no pipe to break.
+GLIBC_RAW="$(ldd --version 2>/dev/null || true)"
+GLIBC_LINE="${GLIBC_RAW%%$'\n'*}"        # e.g. "ldd (GNU libc) 2.28"
+GLIBC="${GLIBC_LINE##* }"                # e.g. "2.28"
+case "$GLIBC" in
+  [0-9]*.[0-9]*) : ;;
+  *) warn "could not parse a glibc version from: ${GLIBC_LINE:-<no output from ldd>}"
+     warn "STOP. Determine the host's glibc before installing anything."
+     exit 4 ;;
+esac
+
+_ver_major() { printf '%s' "${1%%.*}"; }
+_ver_minor() { local r="${1#*.}"; printf '%s' "${r%%.*}"; }
+
 echo "  glibc ${GLIBC}, need >= ${REQUIRED_GLIBC}"
-if [ "$(printf '%s\n%s\n' "$REQUIRED_GLIBC" "$GLIBC" | sort -V | head -1)" != "$REQUIRED_GLIBC" ]; then
+if [ "$(_ver_major "$GLIBC")" -lt "$(_ver_major "$REQUIRED_GLIBC")" ] ||
+   { [ "$(_ver_major "$GLIBC")" -eq "$(_ver_major "$REQUIRED_GLIBC")" ] &&
+     [ "$(_ver_minor "$GLIBC")" -lt "$(_ver_minor "$REQUIRED_GLIBC")" ]; }; then
   warn "glibc ${GLIBC} is older than ${REQUIRED_GLIBC}: the vllm ${VLLM_VERSION} wheel will not install."
   warn "STOP. Do not build from source on the login node. Report this and re-plan."
   exit 4

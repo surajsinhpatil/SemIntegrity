@@ -80,17 +80,27 @@ section "OS and glibc — DECIDES whether vLLM 0.19.1 can be installed at all"
 run cat /etc/os-release
 run uname -a
 run ldd --version
-printf '\n-- vLLM 0.19.1 wheel compatibility --\n' >>"$OUT"
-GLIBC="$(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+$')"
-if [ -n "$GLIBC" ]; then
-  if [ "$(printf '2.31\n%s\n' "$GLIBC" | sort -V | head -1)" = "2.31" ]; then
-    printf 'glibc %s >= 2.31  -> manylinux_2_31 wheel INSTALLABLE\n' "$GLIBC" >>"$OUT"
-  else
-    printf 'glibc %s <  2.31  -> vLLM 0.19.1 wheel NOT INSTALLABLE. STOP and re-plan.\n' "$GLIBC" >>"$OUT"
-  fi
-else
-  printf 'glibc version could not be determined\n' >>"$OUT"
-fi
+printf '\n-- vLLM wheel compatibility (ADR-0015) --\n' >>"$OUT"
+# Parsed without a pipe: `ldd --version | head -1` makes ldd die of SIGPIPE.
+# This file sets `pipefail`, so that would blank the value silently.
+GLIBC_RAW="$(ldd --version 2>/dev/null || true)"
+GLIBC_LINE="${GLIBC_RAW%%$'\n'*}"
+GLIBC="${GLIBC_LINE##* }"
+case "$GLIBC" in
+  [0-9]*.[0-9]*)
+    GMAJ="${GLIBC%%.*}"; GREST="${GLIBC#*.}"; GMIN="${GREST%%.*}"
+    printf 'glibc %s\n' "$GLIBC" >>"$OUT"
+    if [ "$GMAJ" -gt 2 ] || { [ "$GMAJ" -eq 2 ] && [ "$GMIN" -ge 31 ]; }; then
+      printf '  >= 2.31 : manylinux_2_31 OK -> the CUDA-12 line 0.12.0-0.19.1 is available\n' >>"$OUT"
+    else
+      printf '  <  2.31 : manylinux_2_31 NOT installable -> CUDA-12 vLLM is limited to the\n' >>"$OUT"
+      printf '            manylinux1 line, 0.11.2 and below. ADR-0015 pins 0.11.2.\n' >>"$OUT"
+    fi
+    ;;
+  *)
+    printf 'glibc version could not be determined from: %s\n' "${GLIBC_LINE:-<no output>}" >>"$OUT"
+    ;;
+esac
 endsec
 
 section "Software environment"

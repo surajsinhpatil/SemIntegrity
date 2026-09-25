@@ -62,6 +62,19 @@ else
 fi
 
 # --- provenance -------------------------------------------------------------
+# Parse glibc without a pipe. `ldd --version | head -1` makes ldd die of SIGPIPE,
+# which `set -o pipefail` turns into a fatal 141 (observed 2026-09-25).
+glibc_version() {
+  local raw line ver
+  raw="$(ldd --version 2>/dev/null || true)"
+  line="${raw%%$'\n'*}"
+  ver="${line##* }"
+  case "$ver" in
+    [0-9]*.[0-9]*) printf '%s' "$ver" ;;
+    *)             printf 'unknown'   ;;
+  esac
+}
+
 job_provenance() {
   echo "=== SemIntegrity job provenance ==============================="
   echo "job_id        : ${SLURM_JOB_ID:-none}"
@@ -73,10 +86,13 @@ job_provenance() {
   # ConstrainDevices=no on this cluster: cgroups do NOT fence GPUs between jobs,
   # so the only record of which devices are ours is this variable. Log it.
   echo "CUDA_VISIBLE_DEVICES = ${CUDA_VISIBLE_DEVICES:-unset}"
-  # glibc decides whether the ADR-0013 vLLM 0.19.1 wheel (manylinux_2_31) can
-  # be installed at all, and compute nodes need not match the login node. Record
-  # it on every job so the question is answered by an artefact, never inferred.
-  echo "glibc         : $(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+$' || echo unknown)"
+  # glibc decides which vLLM wheels can be installed at all (ADR-0015), and a
+  # compute node need not match the login node. Record it on every job so the
+  # question is answered by an artefact, never inferred.
+  # No `| head -1` here: head closes the pipe, ldd dies of SIGPIPE, and under the
+  # `set -o pipefail` at the top of this file that would abort the job. It cost
+  # one failed run to learn. Slice the string in the shell instead.
+  echo "glibc         : $(glibc_version)"
   echo "os            : $(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-unknown}" || echo unknown)"
   echo "start_utc     : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git_commit    : $(git -C "$SEMINT_ROOT" rev-parse HEAD 2>/dev/null || echo 'not-a-git-repo')"

@@ -1,6 +1,6 @@
 """CLI: validate a benchmark split before spending GPU time.
 
-    python -m semintegrity.benchmark.validate --split pilot --k 5
+    python -m semintegrity.benchmark.validate --split pilot --k 8
 
 Read-only. Exits non-zero on any structural problem, so a Slurm job can gate on
 it rather than discovering a malformed benchmark after the allocation starts.

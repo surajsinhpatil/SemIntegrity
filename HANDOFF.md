@@ -50,7 +50,7 @@ That is 12 constraints × 8 probes → Stage 0 → D1 → **the first PSCR numbe
 | **Development** | MacBook Air M4, 16 GB | authoring, pilots, Qwen2.5-3B, all analysis | **working now** |
 | **Final results** | BITS CSIS cluster, A100 80GB | all 7 models, uniform hardware, Phase 6 | **access blocked** |
 
-**Results from the Mac must never appear in the paper** (ADR-0013). Merging is
+**Results from the Mac must never appear in the paper** (ADR-0014). Merging is
 technically trivial — append-only JSONL keyed by
 `(experiment_id, model_id, probe_id, sample_index)` — but different kernels give
 different numerics, and inconsistency is the dependent variable. If Qwen-3B ran
@@ -165,7 +165,7 @@ is authoring and annotation, not GPU time.
 Six methodology ADRs are `PROPOSED — AWAITING RESEARCHER APPROVAL`:
 0002 (design lattice), 0003 (probe balancing), 0004 (PyMC — forced, no R on the
 cluster), 0006 (Gemma-2 preflight), **0012 (transformers not vLLM)**,
-**0013 (MPS for development only)**.
+**0014 (MPS for development only)**.
 
 Two open methodology questions, both concretely visible in the pilot data:
 * **Q21** — is `polarity` inside the probe equivalence key? Currently excluded

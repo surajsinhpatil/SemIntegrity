@@ -1,13 +1,16 @@
-# Phase 3 pilot (§4.12): 12 constraints x 5 probes x 3 models x all detectors
+# Phase 3 pilot (§4.12): 12 constraints x 8 probes x 3 models x all detectors
+# K=8 is the authoritative pilot design (configs/benchmark/design.yaml,
+# configs/project.yaml, ADR-0003). An earlier value of 5 here contradicted the
+# authored benchmark, which has always held 96 probes = 12 x 8.
 experiment: pilot
 tier: pilot
 track: A
 constraints: 12
 constraints_per_class: 3
-probes_per_constraint: 5
+probes_per_constraint: 8
 models: [qwen25-3b, llama31-8b, gemma2-9b]   # smallest + one per other family; PENDING SIGNOFF (Q10)
 detectors: [D0, D1, D2, D3, D4]
-workload: { probes: 60, generations_per_model: 60, total_generations: 180 }
+workload: { probes: 96, generations_per_model: 96, total_generations: 288 }
 go_no_go:                                      # fixed IN ADVANCE (§4.12)
   - { id: GT,        criterion: ">= 95% of pilot constraints have unambiguous, sourceable ground truth" }
   - { id: PROBE,     criterion: ">= 90% of candidate probes survive human semantic-equivalence validation" }

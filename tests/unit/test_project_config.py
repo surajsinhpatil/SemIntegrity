@@ -207,12 +207,13 @@ def test_no_source_directory_is_hidden_by_gitignore():
     )
 
 
-def test_inference_backend_matches_adr_0012():
-    """One stack for all models, and it is the one ADR-0012 records.
+def test_inference_backend_matches_adr_0013():
+    """One stack for all models, and it is the one the ACCEPTED ADR records.
 
-    Regression test: `backend: transformers` was written by an edit whose anchor
-    silently failed to match, so the config kept saying `vllm` while ADR-0012
-    said otherwise. Nothing caught it until a run tried to import vLLM.
+    Regression test, twice over. First `backend: transformers` was written by an
+    edit whose anchor silently failed to match. Then the correction overshot: the
+    backend was set to transformers citing ADR-0012 six minutes after ADR-0012 had
+    been REJECTED and superseded by ADR-0013, which directs vLLM 0.19.1.
     """
     from semintegrity.utils.config import resolve_model_config
     from semintegrity.utils.paths import p
@@ -224,15 +225,28 @@ def test_inference_backend_matches_adr_0012():
     assert len(set(backends.values())) == 1, (
         f"§4.13 requires ONE stack across all models; got {backends}"
     )
-    assert set(backends.values()) == {"transformers"}, (
-        f"ADR-0012 selects transformers; config says {set(backends.values())}"
+    assert set(backends.values()) == {"vllm"}, (
+        f"ADR-0013 selects vLLM 0.19.1; config says {set(backends.values())}"
     )
 
 
-def test_adr_0012_is_still_the_accepted_decision():
-    """If the ADR is superseded, the test above must be revisited deliberately."""
+def test_adr_0013_is_still_the_accepted_decision():
+    """If the ADR stops being ACCEPTED, the test above must be revisited deliberately.
+
+    The previous version of this guard asked whether ADR-0012 contained
+    "SUPERSEDED" in upper case. The ADR said "superseded" in lower case, so the
+    guard never fired on the very event it existed to catch. Match case-insensitively
+    and assert the positive state rather than the absence of one word.
+    """
     from semintegrity.utils.paths import p
 
-    adr = p("docs/decisions/ADR-0012-inference-stack.md").read_text(encoding="utf-8")
-    assert "SUPERSEDED" not in adr, "ADR-0012 was superseded; update the backend test"
-    assert "transformers" in adr
+    adr = p("docs/decisions/ADR-0013-vllm-cuda12-pin.md").read_text(encoding="utf-8")
+    status = next(ln for ln in adr.splitlines() if ln.startswith("**Status:**"))
+    assert "ACCEPTED" in status.upper(), f"ADR-0013 is no longer accepted: {status}"
+    assert "vllm" in adr.lower()
+
+    superseded = p("docs/decisions/ADR-0012-inference-stack.md").read_text(encoding="utf-8")
+    old_status = next(ln for ln in superseded.splitlines() if ln.startswith("**Status:**"))
+    assert any(w in old_status.upper() for w in ("REJECTED", "SUPERSEDED")), (
+        f"ADR-0012 is no longer rejected; the backend decision must be re-examined: {old_status}"
+    )

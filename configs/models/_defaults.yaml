@@ -20,14 +20,28 @@ generation:
   stop_sequences: ["\n\n", "</s>", "<|eot_id|>", "<end_of_turn>"]
 
 # --- inference backend (§4.13: ONE stack held constant across models) -------
-# transformers, NOT vLLM. §4.13 requires one stack held constant across models;
-# it does not name an engine. vLLM is unusable on the BITS CSIS cluster: every
-# wheel from 0.22 onward links the CUDA 13 runtime (libcudart.so.13) while the
-# driver is 570.158.01 = CUDA 12.8. See ADR-0012.
+# vLLM is the sole inference backend for this study (ADR-0013, ACCEPTED).
+#
+# ADR-0012 proposed transformers and was REJECTED by the researcher. Its claim
+# that "every wheel from 0.22 onward" links CUDA 13 stopped the search at 0.22
+# and never went lower. Reading DT_NEEDED out of the published manylinux wheels
+# gives the real boundary:
+#
+#   vllm 0.17.0-0.19.1  (torch 2.10.0)  -> libcudart.so.12   <- usable here
+#   vllm 0.20.0-0.26.0  (torch 2.11.0)  -> libcudart.so.13
+#   vllm 0.27.0-0.30.0  (torch 2.13.0)  -> libcudart.so.13
+#
+# A wheel's torch pin does NOT track its own CUDA linkage, and neither does its
+# dependency metadata: 0.20.0 and 0.21.0 declare no cu13 dependency yet their
+# extensions link libcudart.so.13. Only the binary is authoritative.
+# Pinned stack: vLLM 0.19.1 on torch 2.10.0+cu128, driver 570.158.01 = CUDA 12.8.
 #
 # Do NOT set this per model. A comparison across models is only interpretable if
-# the stack is identical for all of them.
-backend: transformers
+# the stack is identical for all of them. The MacBook development path
+# (ADR-0014-local-mps, PROPOSED) passes `--backend transformers --device mps`
+# explicitly; its output is quarantined from reported results (never the paper)
+# and must never change this key.
+backend: vllm
 
 # --- serving defaults -------------------------------------------------------
 serving:

@@ -201,6 +201,27 @@ software:
       silently changes the CUDA build, which §4.13 forbids: a single inference
       stack, held constant across all models.
 
+  cache_containment:
+    status: VERIFIED
+    date: 2026-09-25
+    rule: "shared account -- nothing may be written outside work_dir"
+    pinned_in: slurm/templates/_common.sh
+    variables: [HF_HOME, XDG_CACHE_HOME, VLLM_CACHE_ROOT, TORCHINDUCTOR_CACHE_DIR, TRITON_CACHE_DIR]
+    note: >-
+      vLLM 0.11.2 OVERWRITES TORCHINDUCTOR_CACHE_DIR and TRITON_CACHE_DIR at
+      runtime (compiler_interface.py:308,311), redirecting them inside its own
+      base_cache_dir. Since that is derived from VLLM_CACHE_ROOT, pinning
+      VLLM_CACHE_ROOT is sufficient for everything vLLM compiles; the other two
+      matter only for torch.compile used outside vLLM.
+    evidence: >-
+      Job 11968 (pre-fix) wrote 40 files to ~/.cache/vllm between 23:06:00 and
+      23:07:04 IST. Job 11969 (post-fix) ran 23:18:05-23:19:12 and wrote ZERO
+      files under $HOME: `find ~/.cache -newermt '23:18:00' ! -newermt
+      '23:20:00'` returned empty, while vLLM logged the project-local path and
+      torch.compile rebuilt there (15.89 s). The 40 stale pre-fix files are
+      inert and were deliberately left in place -- deleting anything in a shared
+      account's home is the researcher's decision.
+
   blas_thread_hazard:
     observed: "2026-09-25 — pytest stalled at the first `import scipy.stats`"
     cause: >-

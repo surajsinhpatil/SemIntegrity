@@ -102,27 +102,49 @@ def contradicts(a: State, b: State) -> bool:
 
 
 def map_response(raw, constraint, probe, current) -> tuple[State, str]:
-    """Return the proposed state and a cause tag for the breakdown."""
-    if current.label is ResponseLabel.ANSWER:
-        return State("DEFINITE", current.canonical_answer), "already_ANSWER"
+    """Return the proposed state and a cause tag for the breakdown.
+
+    Boolean constraints are NOT exempt. Every probe of a boolean constraint is
+    polar, and a correct model answers YES to the affirmative form and NO to the
+    negated form -- both meaning "the constraint holds". Recording those
+    literally makes a perfectly consistent model score PSCR 0.571 on every
+    boolean constraint. So the same normalisation applies, and it applies to
+    responses the canonicaliser already labelled ANSWER, not only to INVALIDs.
+    """
     if current.label is ResponseLabel.ABSTAIN:
         return State("ABSTAIN"), "already_ABSTAIN"
-    if current.label is not ResponseLabel.INVALID:
+    if current.label not in (ResponseLabel.ANSWER, ResponseLabel.INVALID):
         return State("INVALID"), f"other_label_{current.label.value}"
 
+    was_invalid = current.label is ResponseLabel.INVALID
     is_polar_probe = probe.expected_answer in ("YES", "NO")
-    if constraint.answer_type.value == "boolean":
-        return State("INVALID"), "boolean_constraint_nonboolean_answer"
-    if not is_polar_probe:
-        return State("INVALID"), "open_probe_unrecognised_answer"
 
+    # --- boolean constraint: normalise "does the proposition hold?" ----------
+    if constraint.answer_type.value == "boolean":
+        b = parse_yes_no(raw.raw_text)
+        if b is None:
+            return State("INVALID"), "boolean_constraint_nonboolean_answer"
+        affirms = (probe.polarity.value == "affirmative") == b
+        cause = "polarity_mapped" if was_invalid else "polarity_normalised_boolean"
+        return State("DEFINITE", "YES" if affirms else "NO"), cause
+
+    # --- entity/date, open probe: unchanged ----------------------------------
+    if not is_polar_probe:
+        if was_invalid:
+            return State("INVALID"), "open_probe_unrecognised_answer"
+        return State("DEFINITE", current.canonical_answer), "already_ANSWER"
+
+    # --- entity/date, polar probe: the Q21 mapping ---------------------------
     b = parse_yes_no(raw.raw_text)
     if b is None:
-        return State("INVALID"), "polar_probe_nonpolar_answer"
+        if was_invalid:
+            return State("INVALID"), "polar_probe_nonpolar_answer"
+        return State("DEFINITE", current.canonical_answer), "already_ANSWER"
 
     affirms = (probe.polarity.value == "affirmative") == b
     g = constraint.gold_answer
-    return (State("DEFINITE", g) if affirms else State("NEGATED", g)), "polarity_mapped"
+    cause = "polarity_mapped" if was_invalid else "polarity_normalised_entity_date"
+    return (State("DEFINITE", g) if affirms else State("NEGATED", g)), cause
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -209,6 +231,45 @@ def main(argv: list[str] | None = None) -> int:
     k = tot["k"]
     print(f"\n  {'MEAN':16s} {tot['cc'] / k:8.3f} {tot['cp'] / k:9.3f} "
           f"{tot['nc'] / k:8.3f} {tot['np'] / k:9.3f}")
+    # --- validity invariant --------------------------------------------------
+    # A model that answers EVERY probe with that probe's expected_answer is by
+    # definition perfectly self-consistent. Any PSCR above zero for such a model
+    # is a measurement artifact, not inconsistency. This is a property of the
+    # mapping and needs no model output, so it is computed from the benchmark.
+    print("\n--- VALIDITY CHECK: PSCR for a hypothetical PERFECTLY CONSISTENT model ---")
+    print("    (answers every probe with its own expected_answer; must be 0.000)")
+    print(f"  {'constraint':16s} {'current':>9s} {'proposed':>9s}")
+    cur_art = prop_art = 0.0
+    for cid in sorted(by_constraint):
+        c = constraints[cid]
+        ps = [probes[p.probe_id] for p, _ in
+              [(probes[r.probe_id], None) for r in raws if r.constraint_id == cid]]
+        cur_vals = [p.expected_answer for p in ps]
+        cur_c = sum(a != b for a, b in combinations(cur_vals, 2))
+        prop: list[State] = []
+        for p in ps:
+            if p.expected_answer in ("YES", "NO"):
+                b = p.expected_answer == "YES"
+                affirms = (p.polarity.value == "affirmative") == b
+                if c.answer_type.value == "boolean":
+                    prop.append(State("DEFINITE", "YES" if affirms else "NO"))
+                else:
+                    g = c.gold_answer
+                    prop.append(State("DEFINITE", g) if affirms else State("NEGATED", g))
+            else:
+                prop.append(State("DEFINITE", p.expected_answer))
+        prop_c = sum(contradicts(a, b) for a, b in combinations(prop, 2))
+        npairs = len(list(combinations(ps, 2)))
+        print(f"  {cid:16s} {cur_c / npairs:9.3f} {prop_c / npairs:9.3f}")
+        cur_art += cur_c / npairs
+        prop_art += prop_c / npairs
+    k2 = len(by_constraint)
+    print(f"  {'MEAN ARTIFACT':16s} {cur_art / k2:9.3f} {prop_art / k2:9.3f}")
+    if prop_art > 1e-9:
+        print("  *** PROPOSED MAPPING FAILS THE INVARIANT -- do not adopt it ***")
+    else:
+        print("  proposed mapping scores a perfect model at 0.000, as it must.")
+
     print("\nNOTE: simulation only. No production code changed, no methodology adopted,")
     print("      the 95% CANON threshold and the preregistration are untouched.")
     return 0

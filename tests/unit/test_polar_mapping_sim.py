@@ -96,3 +96,65 @@ def test_only_definite_and_negated_are_evaluable():
     assert State("NEGATED", "X").evaluable
     assert not State("ABSTAIN").evaluable
     assert not State("INVALID").evaluable
+
+
+# --- boolean constraints are NOT exempt -------------------------------------
+
+@pytest.mark.parametrize(
+    ("polarity", "said_yes", "holds"),
+    [
+        ("affirmative", True, True),    # "Is Phi true?" YES        -> Phi holds
+        ("affirmative", False, False),
+        ("negated", True, False),       # "Is it false that Phi?" YES -> Phi fails
+        ("negated", False, True),       # double negation            -> Phi holds
+    ],
+)
+def test_boolean_polarity_normalisation(polarity, said_yes, holds):
+    affirms = (polarity == "affirmative") == said_yes
+    assert affirms is holds
+
+
+def test_perfectly_consistent_model_scores_zero_on_the_real_benchmark():
+    """The validity invariant, against the authored pilot benchmark.
+
+    A model answering every probe with that probe's own `expected_answer` is by
+    definition perfectly self-consistent, so PSCR MUST be 0. Under the current
+    canonicaliser it is 0.643 on average -- 0.714 for entity/date constraints and
+    0.571 for boolean ones -- because affirmative 'YES' and negated 'NO' are
+    recorded as different canonical answers. That is a measurement artifact, and
+    it is the reason this mapping exists.
+
+    Needs no model output: it is a property of the benchmark and the mapping.
+    """
+    from itertools import combinations
+
+    from semintegrity.benchmark.loader import load_split
+    from semintegrity.utils.paths import data_path
+
+    cons_list, probe_list = load_split(data_path("benchmark") / "pilot")
+    constraints = {c.constraint_id: c for c in cons_list}
+    by_constraint: dict[str, list] = {}
+    for probe in probe_list:
+        by_constraint.setdefault(probe.constraint_id, []).append(probe)
+
+    assert len(by_constraint) == 12
+    for cid, ps in by_constraint.items():
+        assert len(ps) == 8, f"{cid} has {len(ps)} probes, expected K=8"
+        c = constraints[cid]
+        states = []
+        for probe in ps:
+            if probe.expected_answer in ("YES", "NO"):
+                affirms = ((probe.polarity.value == "affirmative")
+                           == (probe.expected_answer == "YES"))
+                if c.answer_type.value == "boolean":
+                    states.append(State("DEFINITE", "YES" if affirms else "NO"))
+                else:
+                    g = c.gold_answer
+                    states.append(State("DEFINITE", g) if affirms else State("NEGATED", g))
+            else:
+                states.append(State("DEFINITE", probe.expected_answer))
+        bad = [(a, b) for a, b in combinations(states, 2) if contradicts(a, b)]
+        assert not bad, (
+            f"{cid}: the proposed mapping scores a PERFECTLY CONSISTENT model as "
+            f"having {len(bad)} contradictory pairs. The mapping is wrong."
+        )

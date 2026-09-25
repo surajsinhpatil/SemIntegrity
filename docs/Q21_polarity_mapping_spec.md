@@ -46,10 +46,48 @@ open and polar forms. Any rule keyed on syntax alone would be wrong.
 Let `C` be the constraint (`answer_type` T, `answer_space` S, gold `g`), `P` the
 probe (polarity π, `expected_answer` e), and `r` the raw response.
 
-### Case 1 — T = boolean
-All probes polar; `S = {YES, NO}`. **Unchanged from current behaviour.** The
-current INVALID rate here is 8.3%, and those failures are the cloze cue problem
-of §5, not a mapping gap.
+### Case 1 — T = boolean  ⚠️ CORRECTED 2026-09-25
+
+An earlier draft of this section said "unchanged from current behaviour". **That
+was wrong**, and it is the single most consequential error found so far.
+
+Every probe of a boolean constraint is polar. A correct model answers `YES` to
+the affirmative form and `NO` to the negated form, and **both mean "the
+constraint holds"**. Recording them literally as `ANSWER('YES')` and
+`ANSWER('NO')` makes D1 score that pair as a contradiction, because
+`EQUIVALENCE_KEY_FIELDS` excludes polarity and the two probes are therefore
+compared.
+
+Measured consequence, computed from the benchmark alone with no model output —
+a model answering *every* probe with that probe's own `expected_answer`, i.e. a
+perfectly self-consistent model, scores:
+
+| constraint type | current PSCR | proposed |
+|---|---|---|
+| entity / date | **0.714** | 0.000 |
+| boolean | **0.571** | 0.000 |
+| **mean** | **0.643** | **0.000** |
+
+So the pipeline carries a **PSCR artifact floor of 0.643** before any real
+inconsistency exists. The observed 0.185 sits *below* that floor only because
+coverage was 0.253 — the INVALID-dropping was discarding most of the pairs that
+would have generated the artifact. **Both defects have the same root cause and
+they partially cancel**, which is why the resulting number looked plausible.
+
+The rule is the same as case 3, with the canonical values being whether the
+proposition holds rather than which entity is named:
+
+```
+affirms = (polarity == affirmative) == (response == YES)
+   -> DEFINITE("YES") if affirms else DEFINITE("NO")
+```
+
+It applies to responses the canonicaliser **already labelled ANSWER**, not only
+to INVALIDs — those are precisely the mis-compared ones.
+
+`tests/unit/test_polar_mapping_sim.py` asserts the invariant against the real
+pilot benchmark: a perfectly consistent model must score PSCR 0.000 on every
+constraint. Any mapping that fails it is wrong by construction.
 
 ### Case 2 — T ∈ {entity, date}, probe open (e ∉ {YES, NO})
 **Unchanged.** Match `r` against `S` exactly as now.

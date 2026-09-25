@@ -1,0 +1,455 @@
+# ===========================================================================
+# PILOT CONSTRAINT CANDIDATES — ALL DRAFT
+#
+# Hand-authored by the researcher's assistant, 2026-09-11. NOTHING here is
+# verified, human-validated or frozen. Every record enters the benchmark as
+# verification_status: DRAFT and is promoted only by an explicit, evidenced step.
+#
+# Structure (ADR-0002): 3 families x 4 classes = 12.
+#   * a family is fixed to one domain and contributes exactly one constraint
+#     per class, which is the proposal's nuisance-control device (§4.3);
+#   * 12 is divisible by 4 classes (3 each, exactly as §4.12 requires) but NOT
+#     by 5 domains, so a 12-item pilot cannot cover all five. Three complete
+#     families was preferred over five partial ones, because family completeness
+#     is the structure Phase 1 exists to test.
+#   * UNREPRESENTED DOMAINS: history, biology. Recorded, not hidden.
+#
+# `qid` values are the author's best identification and are CHECKED by the
+# evidence fetcher, not trusted. A wrong QID surfaces as failed evidence and the
+# constraint stays DRAFT.
+# ===========================================================================
+meta:
+  authored_at: "2026-09-11"
+  authored_by: "assistant draft — pending researcher review"
+  families: 3
+  classes_per_family: 4
+  domains_covered: [geography, public_office, science_technology]
+  domains_not_covered: [history, biology]
+  probes_per_constraint: 8
+
+families:
+
+  # =====================================================================
+  - family_id: F-GEO-01
+    domain: geography
+    theme: "the capital of Australia"
+    constraints:
+
+      - constraint_id: K-C1-GEO-01
+        schema_id: S-C1-01
+        class: C1
+        formal_predicate: c1_mutual_exclusion
+        constraint_text: "A country has exactly one capital city; the capital of Australia is Canberra."
+        logical_form: "capital_of(Australia) = ?x"
+        gold_proposition: "The capital city of Australia is Canberra."
+        answer_type: entity
+        answer_space: [Canberra, Sydney, Melbourne]
+        gold_answer: Canberra
+        answer_aliases:
+          Canberra: ["Canberra, ACT", "Canberra ACT"]
+        entities:
+          - {label: Australia, qid: Q408}
+          - {label: Canberra, qid: Q3114}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q408, property: P36, expect_qid: Q3114,
+             description: "Australia (Q408) capital (P36) -> Canberra (Q3114)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Is Canberra a city in Australia?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          subject_formal: "Australia"
+          subject_colloquial: "Australia"
+          relation_formal: "capital city"
+          relation_colloquial: "capital"
+          object: "Canberra"
+        ambiguity_notes: >-
+          Sydney and Melbourne are common distractors and are deliberately in the
+          answer space. Melbourne was the seat of federal parliament 1901-1927,
+          which is a genuine source of confusion and is the subject of C4.
+
+      - constraint_id: K-C2-GEO-01
+        schema_id: S-C2-01
+        class: C2
+        formal_predicate: c2_conjunction
+        constraint_text: >-
+          Two propositions must hold jointly: Canberra is the capital of Australia,
+          AND Canberra is located in the Australian Capital Territory.
+        logical_form: "capital_of(Australia, Canberra) AND located_in(Canberra, ACT)"
+        gold_proposition: >-
+          Canberra is the capital of Australia and is located in the Australian
+          Capital Territory.
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: Australia, qid: Q408}
+          - {label: Canberra, qid: Q3114}
+          - {label: Australian Capital Territory, qid: Q3258}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q408, property: P36, expect_qid: Q3114,
+             description: "Australia capital -> Canberra"}
+          - {kind: claim, subject_qid: Q3114, property: P131, expect_qid: Q3258,
+             description: "Canberra located in administrative entity -> ACT"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which Australian territory is Canberra located?", answer_type: entity, gold_answer: "Australian Capital Territory"}
+        surface:
+          claim_formal: "Canberra is the capital of Australia and is located in the Australian Capital Territory"
+          claim_colloquial: "Canberra is Australia's capital and it sits in the ACT"
+          claim_reverse_formal: "the capital of Australia is Canberra, and the Australian Capital Territory is where it is located"
+          claim_reverse_colloquial: "Australia's capital is Canberra, and the ACT is where it sits"
+        ambiguity_notes: >-
+          Both conjuncts must hold. A model answering YES on the strength of only
+          the first conjunct is indistinguishable from one that checked both;
+          this is a known limitation of a boolean conjunctive probe.
+
+      - constraint_id: K-C3-GEO-01
+        schema_id: S-C3-01
+        class: C3
+        formal_predicate: c3_functional_uniqueness
+        constraint_text: >-
+          Universal: for all cities x and sovereign states y, z, if x is the capital
+          of y and x is the capital of z, then y = z. No city is the capital of two
+          different sovereign states.
+        logical_form: "forall x,y,z: capital_of(y,x) AND capital_of(z,x) -> y = z"
+        gold_proposition: "Canberra is the capital of Australia and of no other sovereign state."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "NO"
+        entities:
+          - {label: Canberra, qid: Q3114}
+          - {label: Australia, qid: Q408}
+        evidence_checks:
+          - {kind: sparql_count, description: "count sovereign states whose capital (P36) is Canberra (Q3114)",
+             query_name: capitals_of_canberra, expect_count: 1}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Of which country is Canberra the capital?", answer_type: entity, gold_answer: "Australia"}
+        surface:
+          claim_formal: "Canberra is the capital of some sovereign state other than Australia"
+          claim_colloquial: "Canberra is the capital of any country besides Australia"
+          claim_reverse_formal: "some sovereign state other than Australia has Canberra as its capital"
+          claim_reverse_colloquial: "any country besides Australia has Canberra as its capital"
+        ambiguity_notes: >-
+          Expected answer is NO. The universal is instantiated on one entity, so a
+          model can answer correctly without representing the quantifier. Class
+          assignment (C3 vs C1) is an AUTHORING JUDGEMENT requiring human review.
+
+      - constraint_id: K-C4-GEO-01
+        schema_id: S-C4-01
+        class: C4
+        formal_predicate: c4_interval_precedence
+        constraint_text: >-
+          Temporal ordering: the year in which Canberra became the seat of the
+          Australian federal parliament must not precede the establishment of the
+          Commonwealth of Australia (1901) nor the founding of Canberra (1913).
+        logical_form: "year(seat_of_parliament(Australia) = Canberra) >= inception(Australia)"
+        gold_proposition: >-
+          The Australian federal parliament moved to Canberra in 1927, after
+          federation in 1901 and the founding of Canberra in 1913.
+        answer_type: date
+        answer_space: ["1927", "1901", "1913"]
+        gold_answer: "1927"
+        temporal_validity: {start: "1901-01-01", end: null, end_unknown: false, precision: year}
+        entities:
+          - {label: Australia, qid: Q408}
+          - {label: Canberra, qid: Q3114}
+        evidence_checks:
+          - {kind: claim_time, subject_qid: Q408, property: P571,
+             description: "Commonwealth of Australia inception (P571) — the temporal anchor",
+             expect_year: 1901}
+          - {kind: claim_time, subject_qid: Q3114, property: P571,
+             description: "Canberra inception (P571)", expect_year: 1913}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which year was the Commonwealth of Australia established?", answer_type: date, gold_answer: "1901"}
+          - {fact_id: F2, question: "In which year was Canberra founded?", answer_type: date, gold_answer: "1913"}
+        surface:
+          subject_formal: "the move of the Australian federal parliament to Canberra"
+          subject_colloquial: "parliament moving to Canberra"
+          relation_formal: "year"
+          relation_colloquial: "year"
+          object: "1927"
+        ambiguity_notes: >-
+          1927 (parliament moved) is distinct from 1913 (city founded) and 1908
+          (site selected). All three appear in sources and 1913 is in the answer
+          space as a genuine distractor. THE 1927 VALUE IS NOT DIRECTLY CHECKED BY
+          THE WIKIDATA QUERIES BELOW — only the two anchors are. Gold answer
+          therefore remains author-asserted pending human validation.
+
+  # =====================================================================
+  - family_id: F-POL-01
+    domain: public_office
+    theme: "the presidency of the United States"
+    constraints:
+
+      - constraint_id: K-C1-POL-01
+        schema_id: S-C1-01
+        class: C1
+        formal_predicate: c1_mutual_exclusion
+        constraint_text: "The office of President of the United States had exactly one first holder."
+        logical_form: "first_holder(President_of_the_United_States) = ?x"
+        gold_proposition: "George Washington was the first President of the United States."
+        answer_type: entity
+        answer_space: ["George Washington", "John Adams", "Thomas Jefferson"]
+        gold_answer: "George Washington"
+        answer_aliases:
+          "George Washington": ["Washington", "Gen. George Washington"]
+        entities:
+          - {label: George Washington, qid: Q23}
+          - {label: President of the United States, qid: Q11696}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q23, property: P39, expect_qid: Q11696,
+             description: "George Washington (Q23) position held (P39) -> President of the US (Q11696)"}
+          - {kind: claim_interval, subject_qid: Q23, property: P39, value_qid: Q11696,
+             description: "start time (P580) of Washington's presidency — the claim actually made",
+             expect_year_at_most: 1789}
+          - {kind: claim_time, subject_qid: Q11696, property: P571,
+             description: "DISCREPANCY RECORD: Wikidata gives office inception (P571) as 1787
+               (Constitution signed), not 1789 (Constitution in effect; first holder took office).
+               Recorded so the divergence is visible rather than hidden. Requires human adjudication.",
+             expect_year: 1787}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Did George Washington hold the office of President of the United States?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          subject_formal: "the United States"
+          subject_colloquial: "the US"
+          relation_formal: "first President"
+          relation_colloquial: "first president"
+          question_word: "Who"
+          object: "George Washington"
+        ambiguity_notes: >-
+          "First President" under the Articles of Confederation is a distinct and
+          contested notion; this constraint concerns the office established by the
+          1789 Constitution. Human review must confirm the wording excludes that
+          reading.
+
+      - constraint_id: K-C2-POL-01
+        schema_id: S-C2-01
+        class: C2
+        formal_predicate: c2_conjunction
+        constraint_text: >-
+          Two propositions must hold jointly: George Washington was the first
+          President of the United States, AND he held that office before 1800.
+        logical_form: "first_holder(POTUS, Washington) AND held_before(Washington, POTUS, 1800)"
+        gold_proposition: >-
+          George Washington was the first President of the United States and held
+          the office from 1789, that is, before 1800.
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: George Washington, qid: Q23}
+          - {label: President of the United States, qid: Q11696}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q23, property: P39, expect_qid: Q11696,
+             description: "Washington position held -> President of the US"}
+          - {kind: claim_interval, subject_qid: Q23, property: P39, value_qid: Q11696,
+             description: "start time (P580) of Washington's presidency", expect_year_at_most: 1800}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which year did George Washington become President of the United States?", answer_type: date, gold_answer: "1789"}
+        surface:
+          claim_formal: "George Washington was the first President of the United States and took office before 1800"
+          claim_colloquial: "George Washington was the first US president and he took office before 1800"
+          claim_reverse_formal: "the first President of the United States was George Washington, and the office was taken up by him before 1800"
+          claim_reverse_colloquial: "the first US president was George Washington, and he got the job before 1800"
+        ambiguity_notes: "Both conjuncts must hold; see the C2 limitation noted for K-C2-GEO-01."
+
+      - constraint_id: K-C3-POL-01
+        schema_id: S-C3-01
+        class: C3
+        formal_predicate: c3_functional_uniqueness
+        constraint_text: >-
+          Universal: for every person x, x cannot simultaneously hold the office of
+          President of the United States and the office of Vice President of the
+          United States.
+        logical_form: "forall x,t: holds(x, POTUS, t) -> NOT holds(x, VPOTUS, t)"
+        gold_proposition: >-
+          No person has simultaneously held the offices of President and Vice
+          President of the United States.
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "NO"
+        entities:
+          - {label: President of the United States, qid: Q11696}
+          - {label: Vice President of the United States, qid: Q11699}
+        evidence_checks:
+          - {kind: entity_exists, subject_qid: Q11696, description: "President of the US is a real office item"}
+          - {kind: entity_exists, subject_qid: Q11699, description: "Vice President of the US is a real office item"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Are President of the United States and Vice President of the United States two distinct offices?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          claim_formal: "some person has simultaneously held the offices of President and Vice President of the United States"
+          claim_colloquial: "anyone has ever been US president and vice president at the same time"
+          claim_reverse_formal: "the offices of President and Vice President of the United States have been held simultaneously by some person"
+          claim_reverse_colloquial: "the jobs of US president and vice president have ever been held by the same person at once"
+        ambiguity_notes: >-
+          Expected answer NO. NOT MACHINE-VERIFIABLE by the checks listed: the
+          evidence only confirms the two offices exist as distinct items. The
+          universal claim itself rests on constitutional knowledge and REQUIRES
+          human validation. Several people held both offices at DIFFERENT times,
+          which makes the simultaneity qualifier load-bearing.
+
+      - constraint_id: K-C4-POL-01
+        schema_id: S-C4-01
+        class: C4
+        formal_predicate: c4_interval_precedence
+        constraint_text: >-
+          Temporal ordering: the first holder of the office of President of the
+          United States took office in 1789; no person held it before that year.
+        logical_form: "forall x,t: holds(x, POTUS, t) -> t >= inception(POTUS)"
+        gold_proposition: >-
+          The office of President of the United States was established in 1789;
+          George Washington took office in that year.
+        answer_type: date
+        answer_space: ["1789", "1776", "1787"]
+        gold_answer: "1789"
+        temporal_validity: {start: "1789-01-01", end: null, end_unknown: false, precision: year}
+        entities:
+          - {label: President of the United States, qid: Q11696}
+          - {label: George Washington, qid: Q23}
+        evidence_checks:
+          - {kind: claim_interval, subject_qid: Q23, property: P39, value_qid: Q11696,
+             description: "start time (P580) of the first holder's term — the temporal anchor
+               this constraint actually asserts",
+             expect_year_at_most: 1789}
+          - {kind: claim_time, subject_qid: Q11696, property: P571,
+             description: "DISCREPANCY RECORD: Wikidata gives office inception (P571) as 1787
+               (Constitution signed). The constraint concerns 1789, when the office was first
+               held. Recorded, not hidden. Requires human adjudication.",
+             expect_year: 1787}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which year was the office of President of the United States established?", answer_type: date, gold_answer: "1789"}
+        surface:
+          subject_formal: "the first holder of the office of President of the United States taking office"
+          subject_colloquial: "the first US president taking office"
+          relation_formal: "year"
+          relation_colloquial: "year"
+          object: "1789"
+        ambiguity_notes: >-
+          1776 (Declaration of Independence) and 1787 (Constitution signed) are in
+          the answer space as genuine distractors that a model may conflate.
+
+  # =====================================================================
+  - family_id: F-SCI-01
+    domain: science_technology
+    theme: "chemical elements and scientific awards"
+    constraints:
+
+      - constraint_id: K-C1-SCI-01
+        schema_id: S-C1-01
+        class: C1
+        formal_predicate: c1_mutual_exclusion
+        constraint_text: "Each chemical element has exactly one IUPAC symbol; the symbol for gold is Au."
+        logical_form: "element_symbol(gold) = ?x"
+        gold_proposition: "The chemical symbol for gold is Au."
+        answer_type: entity
+        answer_space: [Au, Ag, Gd]
+        gold_answer: Au
+        answer_aliases:
+          Au: ["AU"]
+        entities:
+          - {label: gold, qid: Q897}
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q897, property: P246, expect_value: "Au",
+             description: "gold (Q897) element symbol (P246) -> Au"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Is gold a chemical element?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          subject_formal: "gold"
+          subject_colloquial: "gold"
+          relation_formal: "chemical symbol"
+          relation_colloquial: "symbol on the periodic table"
+          object: "Au"
+        ambiguity_notes: >-
+          Ag (silver) and Gd (gadolinium) are in the answer space as plausible
+          distractors. Case matters: 'AU' is accepted as an alias, 'au' is not.
+
+      - constraint_id: K-C2-SCI-01
+        schema_id: S-C2-01
+        class: C2
+        formal_predicate: c2_conjunction
+        constraint_text: >-
+          Two propositions must hold jointly: the chemical symbol for gold is Au,
+          AND the atomic number of gold is 79.
+        logical_form: "element_symbol(gold) = Au AND atomic_number(gold) = 79"
+        gold_proposition: "Gold has the chemical symbol Au and atomic number 79."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: gold, qid: Q897}
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q897, property: P246, expect_value: "Au",
+             description: "gold element symbol -> Au"}
+          - {kind: claim_literal, subject_qid: Q897, property: P1086, expect_value: "79",
+             description: "gold atomic number (P1086) -> 79"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "What is the atomic number of gold?", answer_type: entity, gold_answer: "79"}
+        surface:
+          claim_formal: "the chemical symbol for gold is Au and its atomic number is 79"
+          claim_colloquial: "gold's symbol is Au and its atomic number is 79"
+          claim_reverse_formal: "Au is the chemical symbol for gold, and 79 is its atomic number"
+          claim_reverse_colloquial: "Au is gold's symbol, and 79 is its atomic number"
+        ambiguity_notes: "Both conjuncts must hold; see the C2 limitation noted for K-C2-GEO-01."
+
+      - constraint_id: K-C3-SCI-01
+        schema_id: S-C3-01
+        class: C3
+        formal_predicate: c3_functional_uniqueness
+        constraint_text: >-
+          Universal: for every chemical element x, x has exactly one atomic number.
+          No element has two distinct atomic numbers.
+        logical_form: "forall x,m,n: atomic_number(x,m) AND atomic_number(x,n) -> m = n"
+        gold_proposition: "Gold has exactly one atomic number, 79."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "NO"
+        entities:
+          - {label: gold, qid: Q897}
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q897, property: P1086, expect_value: "79",
+             description: "gold atomic number -> 79 (single-valued)"}
+          - {kind: claim_cardinality, subject_qid: Q897, property: P1086, expect_count: 1,
+             description: "gold has exactly one atomic_number statement"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Does every chemical element have a unique atomic number?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          claim_formal: "gold has more than one atomic number"
+          claim_colloquial: "gold comes with more than one atomic number"
+          claim_reverse_formal: "more than one atomic number belongs to gold"
+          claim_reverse_colloquial: "more than one atomic number is what gold has"
+        ambiguity_notes: >-
+          Expected answer NO. Isotopes vary in MASS number, not atomic number;
+          a model conflating the two is a genuine and interesting failure mode.
+          Class assignment (C3 vs C1) requires human review.
+
+      - constraint_id: K-C4-SCI-01
+        schema_id: S-C4-01
+        class: C4
+        formal_predicate: c4_interval_precedence
+        constraint_text: >-
+          Temporal ordering: the Nobel Prize in Physics was first awarded in 1901,
+          so no Nobel Prize in Physics was awarded before that year.
+        logical_form: "forall x,t: awarded(x, NobelPhysics, t) -> t >= inception(NobelPhysics)"
+        gold_proposition: "The Nobel Prize in Physics was first awarded in 1901."
+        answer_type: date
+        answer_space: ["1901", "1895", "1900"]
+        gold_answer: "1901"
+        temporal_validity: {start: "1901-01-01", end: null, end_unknown: false, precision: year}
+        entities:
+          - {label: Nobel Prize in Physics, qid: Q38104}
+        evidence_checks:
+          - {kind: claim_time, subject_qid: Q38104, property: P571,
+             description: "Nobel Prize in Physics inception (P571) — the temporal anchor",
+             expect_year: 1901}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which year was the Nobel Prize in Physics first awarded?", answer_type: date, gold_answer: "1901"}
+        surface:
+          subject_formal: "the first award of the Nobel Prize in Physics"
+          subject_colloquial: "the Nobel Prize in Physics first being given out"
+          relation_formal: "year"
+          relation_colloquial: "year"
+          object: "1901"
+        ambiguity_notes: >-
+          1895 (Alfred Nobel's will) and 1900 (foundation established) are in the
+          answer space as genuine distractors. ENTITY FAMILIARITY within this
+          family is uneven: gold and the Nobel Prize are both very well known, but
+          the family mixes chemical elements with an award, which is weaker family
+          coherence than §4.3 intends. Flagged for human review.

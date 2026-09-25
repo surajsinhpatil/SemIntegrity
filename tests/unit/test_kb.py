@@ -144,3 +144,21 @@ def test_static_kb_raises_on_unknown_rather_than_returning_a_default():
     with pytest.raises(KeyError):
         kb.sitelinks("Q1")
     assert kb.claim_values("Q1", "P36") == []
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ({"id": "Q3114"}, ("Q3114", None)),
+        ({"time": "+1901-01-01T00:00:00Z"}, (None, "+1901-01-01T00:00:00Z")),
+        ({"amount": "+79", "unit": "1"}, (None, "79")),          # quantity
+        ({"text": "Au", "language": "en"}, (None, "Au")),         # monolingual
+        ("Au", (None, "Au")),                                     # bare string
+        (None, (None, None)),
+    ],
+)
+def test_datavalue_shapes_are_all_unpacked(value, expected):
+    """An unhandled value shape turns a real fact into a failed evidence check."""
+    from semintegrity.kb.wikidata import _unpack_datavalue
+
+    assert _unpack_datavalue(value) == expected

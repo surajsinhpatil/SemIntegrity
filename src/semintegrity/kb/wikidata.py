@@ -184,12 +184,7 @@ class WikidataClient:
         out: list[TimeQualifiedClaim] = []
         for statement in ent.get("claims", {}).get(property_id, []):
             main = statement.get("mainsnak", {}).get("datavalue", {}).get("value")
-            value_qid = main.get("id") if isinstance(main, dict) and "id" in main else None
-            value_literal = None
-            if isinstance(main, dict) and "time" in main:
-                value_literal = main["time"]
-            elif isinstance(main, str):
-                value_literal = main
+            value_qid, value_literal = _unpack_datavalue(main)
             quals = statement.get("qualifiers", {})
             out.append(
                 TimeQualifiedClaim(
@@ -214,6 +209,32 @@ class WikidataClient:
         return self._cached(
             "sparql", request, WIKIDATA_SPARQL, {"query": query.strip(), "format": "json"}
         )
+
+
+def _unpack_datavalue(value: Any) -> tuple[str | None, str | None]:
+    """Extract (qid, literal) from a Wikidata datavalue.
+
+    Wikidata has several value shapes and silently returning an empty string for
+    an unhandled one turns a real fact into a failed evidence check. Quantities
+    in particular carry ``{"amount": "+79", ...}``, not a bare string.
+    """
+    if value is None:
+        return None, None
+    if isinstance(value, str):
+        return None, value
+    if not isinstance(value, dict):
+        return None, str(value)
+    if "id" in value:                      # wikibase-item
+        return value["id"], None
+    if "time" in value:                    # time
+        return None, value["time"]
+    if "amount" in value:                  # quantity, e.g. "+79"
+        return None, str(value["amount"]).lstrip("+")
+    if "text" in value:                    # monolingual text
+        return None, value["text"]
+    if "latitude" in value:                # globe-coordinate
+        return None, f"{value['latitude']},{value['longitude']}"
+    return None, ""
 
 
 def _qualifier_time(qualifiers: dict[str, Any], prop: str) -> str | None:

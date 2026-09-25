@@ -17,7 +17,7 @@ from typing import Annotated, Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..utils.ids import CONSTRAINT_RE, DOMAIN_CODES, FAMILY_RE, SCHEMA_RE
-from .enums import AnswerType, ConstraintClass, Domain, Split
+from .enums import AnswerType, ConstraintClass, Domain, Split, VerificationStatus
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 
@@ -36,6 +36,28 @@ class GoldSource(BaseModel):
     retrieved: dt.date = Field(description="retrieval date — provenance, not publication date")
     is_primary: bool = False
     note: str | None = None
+
+
+class Evidence(BaseModel):
+    """One machine-checked lookup supporting (or contradicting) the gold answer.
+
+    Records what was asked, what came back, and whether it agrees — so an
+    EVIDENCE_VERIFIED claim can be re-checked from the record alone rather than
+    taken on trust.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: NonEmptyStr = Field(description="e.g. 'wikidata'")
+    query: NonEmptyStr = Field(description="what was asked, e.g. 'Q408 P36'")
+    url: NonEmptyStr
+    retrieved_at: dt.date
+    observed_value: str = Field(description="verbatim value returned; empty if nothing was found")
+    supports_gold: bool = Field(
+        description="whether the observed value agrees with gold_answer, by an explicit comparison"
+    )
+    comparison: NonEmptyStr = Field(description="how the comparison was made, in words")
+    note: str = ""
 
 
 class TemporalValidity(BaseModel):
@@ -139,6 +161,19 @@ class Constraint(BaseModel):
         description="DERIVED. canonical answer -> accepted surface forms (§4.7 alias tables).",
     )
 
+    # --- DERIVED: verification ladder --------------------------------------
+    # Integrity tracking (ADR-0012). Not part of the proposal's 17 fields; added
+    # so that "verified" is a checkable state rather than a claim in prose.
+    verification_status: VerificationStatus = VerificationStatus.DRAFT
+    evidence: list[Evidence] = Field(default_factory=list)
+    human_validated_by: str | None = Field(
+        default=None, description="NAMED human. Never set by any automated process."
+    )
+    human_validated_at: dt.date | None = None
+    review_notes: str = Field(
+        default="", description="what a human reviewer still needs to check"
+    )
+
     # --- DERIVED: bookkeeping ----------------------------------------------
     split: Split
     corroborating_sources: list[GoldSource] = Field(default_factory=list)
@@ -222,6 +257,30 @@ class Constraint(BaseModel):
             raise ValueError(
                 f"boolean answer_space must be exactly ['YES','NO'], got {self.answer_space}"
             )
+
+        # --- verification ladder: a rung may not be claimed without its basis ---
+        if self.verification_status is VerificationStatus.EVIDENCE_VERIFIED and not any(
+            e.supports_gold for e in self.evidence
+        ):
+            raise ValueError(
+                f"{self.constraint_id}: EVIDENCE_VERIFIED requires at least one Evidence "
+                "record with supports_gold=True; none is present"
+            )
+        if self.verification_status in (
+            VerificationStatus.HUMAN_VALIDATED,
+            VerificationStatus.FROZEN,
+        ):
+            if not (self.human_validated_by or "").strip():
+                raise ValueError(
+                    f"{self.constraint_id}: {self.verification_status.value} requires a NAMED "
+                    "human validator in human_validated_by. This status is never set "
+                    "automatically and must never be claimed on a human's behalf."
+                )
+            if self.human_validated_at is None:
+                raise ValueError(
+                    f"{self.constraint_id}: {self.verification_status.value} requires "
+                    "human_validated_at"
+                )
         return self
 
     # --- convenience -------------------------------------------------------

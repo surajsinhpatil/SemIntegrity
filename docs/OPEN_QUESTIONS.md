@@ -373,10 +373,10 @@ canonical-label agreement separately for each. Already encoded in
 ---
 
 ## Q20 — Cluster access logistics
-**PARTIALLY RESOLVED 2026-09-11** — interaction model decided (researcher runs all cluster commands, ADR-0010). Cluster *facts* still unknown until the probe runs.
+**PARTIALLY RESOLVED** — 2026-09-11: interaction model decided (researcher runs all cluster commands, ADR-0010). 2026-09-25: host `172.24.16.132`, port 22, account `yashsinha` (a **shared lab account**), and the working directory `/nfs_home/users/yashsinha/H20250058_Suraj` all **confirmed by the professor** — the "another user's home" concern is closed; it is a shared account, and the subfolder is this researcher's designated space. Shared-account rules are now encoded in `configs/cluster/cluster.yaml`. Remaining: the cluster *facts* (partitions, GPUs, CUDA, quota) still need the probe.
 **Was: BLOCKING — Phase 6** · `INFRASTRUCTURE`
 
-The working directory `/nfs_home/users/yashsinha/H202500058_Suraj` sits under
+The working directory `/nfs_home/users/yashsinha/H20250058_Suraj` sits under
 another user's home directory. Worth confirming this is the intended designated
 space and that it is writable by your account, since §"Cluster environment"
 forbids modifying other users' folders.

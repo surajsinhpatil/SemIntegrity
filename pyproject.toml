@@ -79,6 +79,10 @@ ignore = [
 "src/semintegrity/schemas/enums.py" = ["ARG002"]
 # The curly quotes here are the characters being normalised away, not typos.
 "src/semintegrity/canonicalization/canonicaliser.py" = ["RUF001"]
+# `common = dict(...)` is spread into keyword arguments; a literal cannot be.
+"src/semintegrity/kb/evidence.py" = ["C408"]
+# Typographic multiplication signs and en-dashes are intentional in generated prose.
+"scripts/benchmark/make_examples_doc.py" = ["RUF001"]
 # Backends must match the Backend protocol signature whether or not they use
 # every argument; the stub deliberately ignores sampling parameters.
 "src/semintegrity/inference/backend.py" = ["ARG002"]

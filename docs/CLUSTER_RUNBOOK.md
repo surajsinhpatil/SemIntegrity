@@ -9,22 +9,38 @@ Legend — **R** read-only · **W** writes files (repo only) · **D** downloads 
 
 ---
 
+## The cluster
+
+| | |
+|---|---|
+| Host | `172.24.16.132` (BITS CSIS cluster — Dell R7525, NVIDIA A100) |
+| SSH port | 22 |
+| Username | *your cluster account — not your Mac username* |
+| Working dir | `/nfs_home/users/yashsinha/H20250058_Suraj` |
+
+`172.24.x.x` is a private address, so this is reachable only from the college
+network or over the VPN.
+
+**The password is never recorded here, in any script, or in this repository.**
+`ssh` prompts for it in your own terminal each time.
+
 ## Step 0 — get the repository onto the cluster
 
 ```bash
 rsync -av --exclude '.git' --exclude 'hf_cache' --exclude '.venv' \
-  ~/Desktop/SemIntegrity/ <user>@<cluster-host>:/nfs_home/users/yashsinha/H202500058_Suraj/
+  ~/Desktop/SemIntegrity/ CLUSTERUSER@172.24.16.132:/nfs_home/users/yashsinha/H20250058_Suraj/
 ```
 `W` on the cluster, inside your designated directory only · no Slurm · no download.
-Replace `<user>@<cluster-host>` with your login. Your terminal will ask for
-credentials; nothing is stored.
+
+Substitute your **cluster** username. Omitting `CLUSTERUSER@` makes SSH fall back
+to your local Mac username, which is the most common cause of a rejected login.
 
 ---
 
 ## Step 1 — cluster probe  ← **the one that unblocks everything**
 
 ```bash
-cd /nfs_home/users/yashsinha/H202500058_Suraj && bash scripts/cluster/probe_cluster.sh
+cd /nfs_home/users/yashsinha/H20250058_Suraj && bash scripts/cluster/probe_cluster.sh
 ```
 
 **`R` + `W` (one file in the repo) + `N` (three HTTPS HEAD requests).
@@ -57,7 +73,7 @@ no model weights) on the **login node**.
 ## Step 3 — pre-flight, locally on the login node
 
 ```bash
-cd /nfs_home/users/yashsinha/H202500058_Suraj && make check
+cd /nfs_home/users/yashsinha/H20250058_Suraj && make check
 ```
 `R` + `W` (caches only) · no Slurm · no download. Runs config validation, lint
 and 205 unit tests. **Must pass before anything is submitted.**
@@ -67,7 +83,7 @@ and 205 unit tests. **Must pass before anything is submitted.**
 ## Step 4 — cache the one model's weights
 
 ```bash
-cd /nfs_home/users/yashsinha/H202500058_Suraj && \
+cd /nfs_home/users/yashsinha/H20250058_Suraj && \
 HF_HOME="$PWD/hf_cache" python -c "
 from huggingface_hub import snapshot_download
 snapshot_download('Qwen/Qwen2.5-3B-Instruct',
@@ -89,7 +105,7 @@ downloads still need your licence acceptance, but not for this pilot.
 
 Check quota first if the probe reports one is tight:
 ```bash
-df -h /nfs_home/users/yashsinha/H202500058_Suraj
+df -h /nfs_home/users/yashsinha/H20250058_Suraj
 ```
 `R`.
 

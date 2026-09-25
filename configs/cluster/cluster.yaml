@@ -6,13 +6,44 @@
 status: UNPROBED
 
 identity:
-  hostname: UNKNOWN
+  hostname: "172.24.16.132"
+  description: "BITS CSIS cluster — Dell R7525, NVIDIA A100"
+  ssh_port: 22
+  network: "private 172.24.x.x — reachable only from the campus network"
+  account: yashsinha
+  account_type: shared_lab_account
   scheduler: slurm
-  work_dir: /nfs_home/users/yashsinha/H202500058_Suraj
+  work_dir: /nfs_home/users/yashsinha/H20250058_Suraj
   work_dir_note: >-
-    Path lies under another user's home (yashsinha). Confirmed by the researcher
-    as the designated working directory. All project files stay inside it.
+    CONFIRMED by the researcher's professor (2026-09-25). `yashsinha` is a shared
+    lab account, not a personal one, and H20250058_Suraj is this researcher's
+    designated subfolder within it. Resolves Q20.
 
+shared_account_rules:
+  # A shared account means "my files" and "the account's files" are different
+  # things. Everything this project creates stays inside work_dir.
+  - "write ONLY inside work_dir; never elsewhere in /nfs_home/users/yashsinha/"
+  - "never modify the account's shared dotfiles (~/.bashrc, ~/.ssh/config, ~/.condarc)"
+  - "the Python environment lives inside work_dir, not in ~/.conda or ~/miniconda3"
+  - "HF_HOME is forced to ${work_dir}/hf_cache (already set in slurm/templates/_common.sh)"
+  - "`squeue -u yashsinha` shows OTHER people's jobs too — filter by the semint- job-name prefix"
+  - "Slurm quotas, GPU-hours and disk are SHARED with everyone on this account"
+  - "never scancel a job you did not submit"
+  # Observed 2026-09-25: the account's home holds several students' folders
+  # (F20220612_Aadit, H20250063_Swayam, P20260107_Vineet, P20260809_Harsh,
+  # Ashutosh, kaggri, scratch, pylibs). Confirms this is genuinely shared.
+
+login_security:
+  # 2026-09-25: repeated failed logins (wrong username) triggered an IP block.
+  incident: "source IP 172.17.84.163 blocked after failed auth; REJECT escalated to DROP"
+  lesson: "confirm the username BEFORE attempting; each retry can extend the ban"
+  remedy: "wait, or ask the CSIS admin to clear the fail2ban entry for the source IP"
+
+
+# Cluster policy, quoted from the login banner:
+#   "All users are requested to execute their jobs using Slurm job files,
+#    rather than running them directly on the node's terminal console."
+# This matches scripts/_guard_login_node.sh exactly.
 hard_rules:
   login_node_allowed:   [edit_files, git, lightweight_commands, squeue_sacct, sbatch]
   login_node_forbidden: [model_inference, model_download, nli_scoring, glmm_fitting, any_gpu_work]
@@ -38,8 +69,13 @@ storage:
   note: "weights are cached ONCE from a non-GPU session, never inside GPU time (§4.13)"
 
 software:
-  module_system: UNKNOWN
-  available_modules: []
+  # Observed in the login banner, 2026-09-25. Full list still needs `module avail`.
+  module_system: environment_modules   # `module avail` / `module load`
+  modules_advertised_in_banner:
+    - minicondadefault
+    - jupyter/lab
+    - python/3.13.5
+  available_modules: []                # filled from the probe's `module avail`
   cuda_version: UNKNOWN
   driver_version: UNKNOWN
   python_available: UNKNOWN

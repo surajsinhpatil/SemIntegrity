@@ -183,3 +183,47 @@ class ValidationStatus(StrEnum):
     VALIDATED = "validated"
     REWRITTEN = "rewritten"
     DISCARDED = "discarded"
+
+class VerificationStatus(StrEnum):
+    """Where a constraint sits on the evidence ladder.
+
+    A strict, monotone ladder. Nothing may claim a rung it has not reached, and
+    the :class:`~semintegrity.schemas.constraint.Constraint` validators refuse
+    records that do:
+
+    ``DRAFT``
+        Authored by a human. The claim may be right, but nothing has checked it.
+        **This is the only status a newly authored constraint may hold.**
+    ``EVIDENCE_VERIFIED``
+        At least one machine-checked piece of evidence from the knowledge base
+        agrees with ``gold_answer``. Requires an :class:`Evidence` record with
+        ``supports_gold=True``. Says nothing about whether the constraint is
+        well-posed, unambiguous or correctly classified.
+    ``HUMAN_VALIDATED``
+        A **named** human confirmed the claim, its wording and its class
+        assignment. Requires ``human_validated_by`` and ``human_validated_at``.
+        This status is never set by any automated process.
+    ``FROZEN``
+        Human-validated and included in a frozen split (§4.1). No changes after.
+    """
+
+    DRAFT = "DRAFT"
+    EVIDENCE_VERIFIED = "EVIDENCE_VERIFIED"
+    HUMAN_VALIDATED = "HUMAN_VALIDATED"
+    FROZEN = "FROZEN"
+
+
+#: Ladder order. Used to test "has at least reached" without implying that these
+#: are interchangeable with a numeric scale.
+VERIFICATION_RANK: dict[str, int] = {
+    VerificationStatus.DRAFT.value: 0,
+    VerificationStatus.EVIDENCE_VERIFIED.value: 1,
+    VerificationStatus.HUMAN_VALIDATED.value: 2,
+    VerificationStatus.FROZEN.value: 3,
+}
+
+
+def at_least(status: VerificationStatus, floor: VerificationStatus) -> bool:
+    """Whether ``status`` has reached ``floor`` on the ladder."""
+    return VERIFICATION_RANK[status.value] >= VERIFICATION_RANK[floor.value]
+

@@ -1,7 +1,7 @@
 # PROJECT_STATUS
 
 **Project:** SemIntegrity — Measuring Semantic Self-Inconsistency in LLMs Across Structured Integrity Constraints
-**Last updated:** 2026-09-11 (session 3)
+**Last updated:** 2026-09-11 (session 4)
 **Current phase:** Phase 0 complete · Phase 1 infrastructure complete · **Phase −1 awaiting the cluster probe** · one-model pilot stack ready
 
 > This file is the live state of the project. It is updated at the end of every
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | −1 | Infrastructure reconnaissance | **NOT STARTED** — needs cluster access | env test + smoke job pass |
 | 0 | Literature verification | **COMPLETE** — 12/12 resolved | every citation VERIFIED |
-| 1 | Constraint representation + 12 pilot constraints | **INFRASTRUCTURE DONE** · content pending | predicates execute; ground truth resolves |
+| 1 | Constraint representation + 12 pilot constraints | **COMPLETE (DRAFT)** — 12 constraints, 96 probes built | predicates execute; ground truth resolves |
 | 2 | Pipeline implementation | **PARTIAL** — Stage 0, D1, inference done; D2/D3/D4 pending | pipeline runs end to end |
 | 3 | Pilot — reduced to **1 model** on advice | **READY TO RUN** — blocked on cluster probe + constraint approval | go/no-go criteria |
 | 4 | Preregistration preparation | **NOT STARTED** | **researcher submits to OSF** |
@@ -114,20 +114,48 @@ resumable runner, Stage 0 canonicaliser, D1, and three CLI entry points.
   characters. Corrected, and `test_no_hand_written_revision_hashes_in_docs`
   now fails the suite on any SHA in the docs that matches no pinned config.
 
+
+### Session 4 — 2026-09-11 · pilot benchmark constructed
+
+**12 pilot constraints and 96 probes exist as real benchmark records**
+(`data/benchmark/pilot/{constraints,probes}.jsonl`), built from a hand-authored
+`candidates.yaml` by `scripts/benchmark/build_pilot.py`.
+
+* 3 families x 4 classes; 3 per class exactly; geography / public_office /
+  science_technology. **history and biology not covered** — 12 does not divide by 5.
+* 8 probes per constraint, every (polarity x register x direction) cell once,
+  all 24 factor cells across the pilot, no duplicate probe text.
+* **21/21 Wikidata evidence checks pass**, sitelinks fetched, class familiarity
+  matched (Kruskal-Wallis p = 0.855).
+* **ALL 12 ARE DRAFT.** Nothing promoted, nothing human-validated, nothing frozen.
+
+New: `VerificationStatus` ladder (DRAFT -> EVIDENCE_VERIFIED -> HUMAN_VALIDATED
+-> FROZEN) enforced in the schema; `Evidence` records; `probes/surface.py`;
+`kb/evidence.py`; two placeholder D0 predicates that state their own limits;
+`show_pilot.py` demo command; `docs/PILOT_BENCHMARK_PREVIEW.md`.
+
+**Verified:** `pytest -q` -> **236 passed** (22 new, written against the real
+records) · `ruff check` clean · all validators pass.
+
+**Bugs caught:** unquoted `YES`/`NO` in YAML became booleans and silently broke
+every boolean answer space; the Wikidata client dropped quantity datavalues, so
+gold's atomic number read as empty; two POL evidence checks were mis-specified
+(testing office inception when the constraint concerns the first holder taking
+office); ungrammatical probe text from naive template composition.
+
 ---
 
 ## Pending — immediate next steps
 
 | # | Task | Blocked by |
 |---|---|---|
-| 1 | Run the cluster probe (`docs/CLUSTER_RUNBOOK.md` step 1) | **researcher** — unblocks 14 of 16 markers |
-| 2 | Send me the probe report; I configure `cluster.yaml` | researcher, then me |
-| 3 | Cache Qwen2.5-3B weights (~6 GB, ungated, no token needed) | researcher, login node |
-| 4 | `00_env_test` → `10_smoke_inference` | researcher, Slurm |
-| 5 | **Approve Q21** (polarity in the equivalence key) | **researcher** — blocks probe authoring |
-| 6 | **Approve Q22** (which D0 verdict is "D0") | **researcher** |
-| 7 | Draft 12 pilot constraints → present for approval | me, then researcher |
-| 8 | Identify the second annotator (~31 h) | **researcher** (Q9) |
+| 1 | **Review the 12 draft constraints**; approve promotion to EVIDENCE_VERIFIED | **researcher** |
+| 2 | **Adjudicate the 1787/1789 discrepancy** on K-C1-POL-01 and K-C4-POL-01 | **researcher** |
+| 3 | **Approve Q21** (polarity in the equivalence key) — now concretely visible | **researcher** |
+| 4 | **Approve Q22** (which D0 verdict is "D0") | **researcher** |
+| 5 | Run the cluster probe (`docs/CLUSTER_RUNBOOK.md` step 1) | **researcher** |
+| 6 | Human probe-equivalence validation: 96 probes x 2 annotators = 192 judgements | **researcher** + 2nd annotator |
+| 7 | Cache Qwen2.5-3B (~6 GB, ungated) then env test -> smoke test -> pilot | researcher, Slurm |
 
 ## Blockers
 
@@ -196,5 +224,6 @@ Claims made in this repository that are **not yet** backed by a real artefact:
 | torch / vLLM versions | **unpinned** — depend on the cluster CUDA version |
 | Any experimental result | **none exist** |
 | Any human annotation | **none exist** |
-| Pilot constraint content | **not authored** — infrastructure only; content goes to the researcher for approval before it is treated as benchmark data |
+| Pilot constraint content | **12 authored, ALL DRAFT** — machine evidence attached (21/21 checks pass); no human review, no promotion, not frozen |
+| Two POL constraints | **blocked from promotion** — recorded 1787/1789 source discrepancy needs human adjudication |
 | Synthetic test fixtures | factually invented, confined to `tests/`, and `test_no_synthetic_leak.py` asserts they never reach `data/` or `results/` |

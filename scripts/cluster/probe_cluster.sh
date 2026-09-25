@@ -36,7 +36,7 @@ printf '$ echo "$HOME"\n%s\n' "$HOME" >>"$OUT"
 endsec
 
 section "Designated working directory"
-WORKDIR="/nfs_home/users/yashsinha/H202500058_Suraj"
+WORKDIR="/nfs_home/users/yashsinha/H20250058_Suraj"
 run ls -ld "$WORKDIR"
 run test -w "$WORKDIR"
 printf 'writable: %s\n' "$([ -w "$WORKDIR" ] && echo yes || echo NO)" >>"$OUT"

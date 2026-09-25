@@ -93,11 +93,20 @@ class D0Predicate(ABC):
 
     def __init_subclass__(cls, **kw: Any) -> None:
         super().__init_subclass__(**kw)
-        if inspect.isabstract(cls):
+        # Skip abstract classes and intermediate bases. A leading underscore
+        # marks a class that supplies shared behaviour but is never registered
+        # as a predicate in its own right; concrete predicates must declare
+        # their identity so that no verdict can be attributed to an unnamed
+        # formalisation.
+        if inspect.isabstract(cls) or cls.__name__.startswith("_"):
             return
         for required in ("predicate_name", "schema_id", "formal_statement"):
             if not getattr(cls, required, ""):
-                raise TypeError(f"{cls.__name__} must declare a non-empty {required!r}")
+                raise TypeError(
+                    f"{cls.__name__} must declare a non-empty {required!r}. "
+                    "If this class is an intermediate base rather than a real "
+                    "predicate, prefix its name with an underscore."
+                )
 
     # -- required -----------------------------------------------------------
     @abstractmethod

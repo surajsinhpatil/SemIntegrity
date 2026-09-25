@@ -271,3 +271,26 @@ def test_audit_case_must_reference_its_own_predicate(c1, c1_constraint, kb):
     wrong = c1_constraint.model_copy(update={"formal_predicate": "something_else"})
     with pytest.raises(ValueError, match="references predicate"):
         audit_predicate(c1, [_case("a1", wrong, ["x", "x"], Verdict.SATISFIED)], kb)
+
+
+def test_intermediate_bases_are_exempt_but_concrete_predicates_are_not():
+    """An underscore-prefixed base supplies behaviour; it is never a predicate."""
+    from semintegrity.detectors.d0.base import D0Predicate, D0Result
+
+    class _Shared(D0Predicate):  # no identity declared — permitted
+        def check_pair(self, constraint, a, b, kb):  # pragma: no cover
+            return D0Result(Verdict.SATISFIED, "x", "y")
+
+    with pytest.raises(TypeError, match="intermediate base"):
+
+        class Concrete(_Shared):  # concrete, identity missing — rejected
+            pass
+
+
+def test_placeholder_predicates_declare_their_limits(registry):
+    """C2/C3 pilot predicates must say plainly what they do NOT formalise."""
+    for name in ("c2_conjunction", "c3_functional_uniqueness"):
+        p = registry.get(name)
+        assert "PLACEHOLDER" in p.formal_statement
+        assert "does NOT" in p.formal_statement
+        assert "placeholder" in p.version

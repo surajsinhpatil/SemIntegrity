@@ -71,10 +71,13 @@ CONDA_BASE="$(conda info --base)"
 nounset_off
 # shellcheck disable=SC1091
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
-# Leave any environment that is already active, so `conda activate` below does
-# not have to run a deactivate hook mid-script.
-while [[ -n "${CONDA_PREFIX:-}" ]]; do conda deactivate || break; done
 nounset_on
+# NOTE: do NOT loop on `conda deactivate` here. `module load miniconda` keeps a
+# base environment active, and deactivate returns success without clearing
+# CONDA_PREFIX, so a `while [[ -n "$CONDA_PREFIX" ]]` loop never terminates.
+# It is also unnecessary: `conda activate` replaces whatever is active, and the
+# deactivate hooks it runs are already safe because nounset is relaxed around
+# activation below.
 
 if [[ -d "$ENV_PREFIX" ]]; then
   say "Environment already exists at ${ENV_PREFIX} — reusing it"
@@ -87,6 +90,7 @@ else
   nounset_on
 fi
 
+say "Activating ${ENV_PREFIX}"
 nounset_off
 conda activate "$ENV_PREFIX"
 nounset_on

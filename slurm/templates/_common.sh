@@ -4,8 +4,20 @@
 # place so that no single job script can quietly diverge.
 set -euo pipefail
 
-: "${SEMINT_ROOT:?SEMINT_ROOT must be set (the repository root on the cluster)}"
+# Default to the directory the job was submitted from. Requiring an explicit
+# export meant a forgotten variable burned a GPU allocation to print an error.
+SEMINT_ROOT="${SEMINT_ROOT:-${SLURM_SUBMIT_DIR:-$PWD}}"
+export SEMINT_ROOT
+[[ -f "${SEMINT_ROOT}/configs/project.yaml" ]] || {
+  echo "SEMINT_ROOT=${SEMINT_ROOT} is not the project root (no configs/project.yaml)" >&2
+  exit 1
+}
 cd "$SEMINT_ROOT"
+
+# The conda environment lives inside the project by default.
+if [[ -z "${SEMINT_ENV_ACTIVATE:-}" && -d "${SEMINT_ROOT}/.conda-env" ]]; then
+  export SEMINT_ENV_ACTIVATE="${SEMINT_ROOT}/.conda-env"
+fi
 
 # --- caches stay inside the working directory (never in $HOME, never shared) --
 export HF_HOME="${SEMINT_ROOT}/hf_cache"

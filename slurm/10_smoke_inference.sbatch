@@ -15,7 +15,7 @@
 # that is not gated on Hugging Face, so it needs no licence acceptance.
 #   MODEL=qwen25-7b sbatch ... slurm/10_smoke_inference.sbatch
 
-source slurm/templates/_common.sh
+source "${SLURM_SUBMIT_DIR:-$PWD}/slurm/templates/_common.sh"
 job_provenance
 
 MODEL="${MODEL:-qwen25-3b}"

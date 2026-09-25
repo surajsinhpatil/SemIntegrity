@@ -14,7 +14,7 @@
 #
 #   sbatch --partition=<from probe> --gres=gpu:1 slurm/00_env_test.sbatch
 
-source slurm/templates/_common.sh
+source "${SLURM_SUBMIT_DIR:-$PWD}/slurm/templates/_common.sh"
 job_provenance
 
 echo "--- 1. interpreter and package imports ---"

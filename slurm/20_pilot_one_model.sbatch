@@ -17,7 +17,7 @@
 #   * data/benchmark/pilot/{constraints,probes}.jsonl exist and validate
 #   * the model revision is pinned
 
-source slurm/templates/_common.sh
+source "${SLURM_SUBMIT_DIR:-$PWD}/slurm/templates/_common.sh"
 job_provenance
 
 MODEL="${MODEL:-qwen25-3b}"

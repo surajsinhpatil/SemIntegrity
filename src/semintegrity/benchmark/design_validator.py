@@ -311,8 +311,19 @@ class BenchmarkDesignValidator:
             )
         try:
             from scipy.stats import kruskal
-        except ImportError:  # pragma: no cover
-            return RuleResult("sitelink_matching", True, "scipy unavailable; test skipped", severity="warning")
+        except ImportError:
+            # FAIL CLOSED. A validity check that cannot run has NOT passed.
+            # Reporting True here would let a benchmark whose classes are
+            # confounded with entity familiarity sail through unnoticed — and
+            # §4.3 calls that "the most damaging alternative explanation for any
+            # observed class effect". Silence is not evidence of absence.
+            return RuleResult(
+                "sitelink_matching",
+                False,
+                "CHECK COULD NOT RUN: scipy is not installed, so entity-familiarity "
+                "matching was never tested. Install it with: pip install -e '.[analysis]'",
+                severity="error",
+            )
 
         medians_only = {k.value: round(sorted(v)[len(v) // 2], 1) for k, v in sorted(groups.items(), key=lambda kv: kv[0].value)}
         try:

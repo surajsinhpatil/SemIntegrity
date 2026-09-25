@@ -75,7 +75,25 @@ which python
 # --- project package --------------------------------------------------------
 say "Installing SemIntegrity (login-node dependencies: no torch, no vllm)"
 python -m pip install --upgrade pip setuptools wheel
+# [dev] pulls [analysis] transitively, which brings scipy. The design
+# validator's entity-familiarity check (§4.3) needs it and now FAILS CLOSED
+# without it, so a dev environment missing scipy cannot silently under-test.
 python -m pip install -e "${ROOT}[dev]"
+
+say "Confirming the analysis stack is present"
+python - <<'PY'
+import importlib, sys
+missing = []
+for m in ("scipy", "sklearn", "matplotlib", "krippendorff", "statsmodels"):
+    try:
+        mod = importlib.import_module(m)
+        print(f"  OK      {m:14s} {getattr(mod, '__version__', '?')}")
+    except ImportError:
+        print(f"  MISSING {m}")
+        missing.append(m)
+if missing:
+    sys.exit(f"analysis dependencies missing: {missing}")
+PY
 
 if [[ $WITH_GPU -eq 1 ]]; then
   say "Installing torch + vLLM (large — expect ~10 GB and several minutes)"

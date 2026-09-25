@@ -57,8 +57,35 @@ def test_family_spanning_two_domains_is_caught(validator):
     assert not rule.passed
 
 
+def test_missing_scipy_fails_closed(validator, benchmark, monkeypatch):
+    """A validity check that cannot run must NOT report success.
+
+    Regression test for a real bug: the check returned passed=True when scipy
+    was absent, so on the cluster — where the analysis actually runs — a
+    benchmark confounded between class and entity familiarity would have passed
+    validation in silence.
+    """
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_scipy(name, *args, **kwargs):
+        if name.startswith("scipy"):
+            raise ImportError("simulated: scipy not installed")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_scipy)
+    rule = next(
+        r for r in validator.validate(benchmark).results if r.rule == "sitelink_matching"
+    )
+    assert not rule.passed, "a check that could not run must never report PASS"
+    assert rule.severity == "error"
+    assert "COULD NOT RUN" in rule.message
+
+
 def test_sitelink_confound_is_detected(validator):
     """C3/C4 built from far less familiar entities must trip the matching test."""
+    pytest.importorskip("scipy")
     cs = []
     for dom in Domain:
         for i in range(1, 7):
@@ -76,6 +103,7 @@ def test_sitelink_confound_is_detected(validator):
 
 
 def test_matched_sitelinks_pass(validator, benchmark):
+    pytest.importorskip("scipy")
     rule = next(r for r in validator.validate(benchmark).results if r.rule == "sitelink_matching")
     assert rule.passed
 

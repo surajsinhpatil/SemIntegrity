@@ -31,8 +31,15 @@ dependencies = [
 
 [project.optional-dependencies]
 inference = ["torch", "transformers", "vllm", "accelerate", "huggingface_hub"]
-analysis  = ["scipy", "statsmodels", "arviz", "pymc", "numpyro", "matplotlib", "krippendorff", "scikit-learn"]
-dev       = ["pytest", "pytest-cov", "hypothesis", "ruff", "mypy", "pre-commit", "types-PyYAML"]
+# `analysis` is needed from Phase 1 onward: the design validator's
+# entity-familiarity check (§4.3) needs scipy, and without it that check now
+# fails closed rather than passing silently.
+analysis  = ["scipy", "statsmodels", "matplotlib", "krippendorff", "scikit-learn"]
+# The Bayesian stack is heavy and not needed until Phase 8 (ADR-0004).
+bayes     = ["pymc", "numpyro", "arviz"]
+# `dev` includes `analysis` deliberately: the test suite exercises the validator,
+# so a dev environment without scipy cannot actually test what it claims to.
+dev       = ["semintegrity[analysis]", "pytest", "pytest-cov", "hypothesis", "ruff", "mypy", "pre-commit", "types-PyYAML"]
 
 [project.scripts]
 semint = "semintegrity.cli:app"

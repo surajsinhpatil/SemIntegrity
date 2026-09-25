@@ -50,10 +50,20 @@ secondary_model:
       combinations), so the three factors enter as separate main effects, not as
       a full interaction. Cells with zero evaluable pairs contribute no row.
   backend:
-    # UNRESOLVED (Q8): no R on the local machine; cluster R availability unknown.
-    status: UNRESOLVED
-    primary_proposed: pymc            # pure-Python beta-binomial + random intercepts
-    crosscheck_proposed: glmmTMB      # R, only if available on the cluster
+    # RESOLVED 2026-09-25 by the cluster probe: R is NOT installed on the BITS
+    # CSIS cluster (`which R Rscript` -> not found), and none of the Lmod
+    # modules provides it. glmmTMB is therefore unavailable, so the PyMC path
+    # is not a preference but the only option. Recorded so the paper states
+    # this as a constraint rather than a choice.
+    status: RESOLVED
+    primary: pymc                     # beta-binomial + random intercepts
+    crosscheck: none_available
+    crosscheck_reason: "no R and no R module on the cluster; glmmTMB cannot be run"
+    consequence: >-
+      Intervals from this model are Bayesian CREDIBLE intervals, not confidence
+      intervals, and the priors become preregistered quantities. §4.11's
+      precedence rule is unaffected: the cluster bootstrap still carries the
+      confirmatory claim.
   domain_random_effect_caveat: "5 levels is at the lower bound for a random effect; report variance estimate with caution"
 
 exploratory:

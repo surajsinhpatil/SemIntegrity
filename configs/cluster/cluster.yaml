@@ -3,10 +3,14 @@
 # EVERY field marked UNKNOWN must be filled by scripts/cluster/probe_cluster.sh
 # run ON the login node. Nothing here is guessed.
 # ===========================================================================
-status: UNPROBED
+status: PROBED   # 2026-09-25, docs/phase0/cluster_probe_20260925T114922Z.md
 
 identity:
   hostname: "172.24.16.132"
+  fqdn: "csis.mn1.cluster_csis1"
+  slurm_cluster_name: cluster1
+  slurm_version: "23.11.11"
+  uid: 1022
   description: "BITS CSIS cluster — Dell R7525, NVIDIA A100"
   ssh_port: 22
   network: "private 172.24.x.x — reachable only from the campus network"
@@ -52,16 +56,52 @@ hard_rules:
     scripts/_guard_login_node.sh is sourced by every heavy script and aborts if
     it detects it is running on the login node without SLURM_JOB_ID set.
 
-partitions:        # filled by probe_cluster.sh (sinfo)
-  status: UNKNOWN
-  discovered: []
+partitions:
+  status: PROBED
+  default: cpu-short
+  discovered:
+    - {name: debug,      timelimit: "00:30:00", gpu: true}
+    - {name: cpu-short,  timelimit: "12:00:00", gpu: true, is_default: true}
+    - {name: cpu-long,   timelimit: "1-00:00:00", gpu: true}
+    - {name: gpu-short,  timelimit: "08:00:00", gpu: true}
+    - {name: gpu-long,   timelimit: "12:00:00", gpu: true}
+    - {name: gpu-1day,   timelimit: "1-00:00:00", gpu: true}
+    - {name: gpu-3day,   timelimit: "3-00:00:00", gpu: true}
+    - {name: bigmem,     timelimit: "12:00:00", gpu: true}
+    - {name: test-gpu,   timelimit: "7-00:00:00", gpu: true}
+  nodes: "csis.cn[1-4], csis.mn1  (5 nodes)"
+  note: >-
+    Every partition advertises the same GRES. Partition choice is therefore about
+    WALLTIME, not hardware.
 
-gpus:              # filled by probe_cluster.sh
-  status: UNKNOWN
-  discovered: []
+gpus:
+  status: PROBED
+  gres_string: "gpu:a100-80gb:2"
+  model: "NVIDIA A100 80GB (PCIe)"
+  vram_gb: 80
+  per_node: 2
+  node_cpus: 128
+  node_mem_mb: 240000
+  features: [a100-80gb, pcie]
+  implication: >-
+    80 GB per GPU is ample: every model up to 14B fits on ONE A100 in bf16 with
+    room for KV cache. Llama-3.3-70B at ~141 GB needs 2 GPUs (tensor_parallel_size=2),
+    which fits within the account's gres/gpu=3 limit.
+  bf16_supported: ASSUMED_YES   # A100 supports bf16; VERIFY in the env test
 
 storage:
-  quota_gb: UNKNOWN
+  status: PROBED
+  filesystem: "/dev/sdb1 mounted at /nfs_home (24 TB, 31% used)"
+  quota_used_gb: 687
+  quota_soft_gb: 999
+  quota_hard_gb: 1000
+  headroom_gb: 313
+  quota_is_shared: true
+  quota_warning: >-
+    The 687 GB already used belongs to the WHOLE shared account. ~313 GB of
+    headroom against a 1 TB hard limit. All seven models in bf16 are ~244 GB,
+    which fits but leaves little margin and would crowd out labmates. STAGE
+    models one at a time and evict rather than caching all seven at once.
   # Weights needed if all 7 models are cached in bf16 (estimates):
   #   3B ~7 + 7B ~16 + 7B ~15 + 8B ~16 + 9B ~19 + 14B ~30 + 70B ~141  =  ~244 GB
   estimated_weights_gb: 244
@@ -70,50 +110,112 @@ storage:
 
 software:
   # Observed in the login banner, 2026-09-25. Full list still needs `module avail`.
-  module_system: environment_modules   # `module avail` / `module load`
-  modules_advertised_in_banner:
-    - minicondadefault
-    - jupyter/lab
-    - python/3.13.5
-  available_modules: []                # filled from the probe's `module avail`
-  cuda_version: UNKNOWN
-  driver_version: UNKNOWN
-  python_available: UNKNOWN
-  r_available: UNKNOWN          # determines the GLMM backend decision (Q8)
+  module_system: lmod                  # Lmod 8.7.65
+  available_modules:
+    apps:      [cuda/12.8, gamess/00, jupyter/lab, miniconda/default, nvhpc/24.1, singularity/4.4.0]
+    envs:      [pytorch/1.0, "pytorch/2.10 (default)", tensorflow/1.0]
+    lang:      [python/3.6, "python/3.13.7 (default)"]
+    libraries: [boost/1.84.0, fftw/3.3.10-double, hdf5/1.14.3-serial, lapack/3.12.0, openblas/0.3.27, scalapack/2.2.1]
+  system_python: "3.6.8 — FAR too old; a module must always be loaded"
+  conda: "/usr/local/bin/conda (system-wide)"
+  cuda_module: cuda/12.8
+  torch_module: pytorch/2.10
+  nvcc_on_login_node: false            # expected; cuda module not loaded by default
+  cuda_version: "12.8 (module)"
+  driver_version: UNKNOWN_ON_LOGIN_NODE   # nvidia-smi is blocked here by policy
+  python_available: "3.13.7 via module, 3.6.8 system"
+  r_available: false                   # RESOLVES Q8 -> PyMC is the GLMM backend (ADR-0004)          # determines the GLMM backend decision (Q8)
 
 network:
-  login_node_internet: UNKNOWN  # determines whether Wikidata/HF can be reached at all
-  compute_node_internet: UNKNOWN
-  proxy_required: UNKNOWN
+  login_node_internet: true     # VERIFIED 2026-09-25
+  reachability:
+    "https://query.wikidata.org": "HTTP 200"
+    "https://www.wikidata.org": "HTTP 301"
+    "https://huggingface.co": "HTTP 200"
+  compute_node_internet: UNKNOWN   # test inside the first allocation
+  proxy_required: false
+  implication: >-
+    The login node reaches both Wikidata and Hugging Face, so §4.13's plan holds
+    exactly: cache weights and the KB snapshot from a non-GPU session, then run
+    compute jobs offline.
   mitigation: "KB snapshot + model weights are cached on the login node so compute jobs need NO network"
 
-resource_plan:     # sbatch requests; refined after the probe + pilot timings
-  small_models:    # <= 14B, bf16, tp=1
+account_limits:
+  # From `sacctmgr show associations user=yashsinha`, 2026-09-25.
+  # AccountingStorageEnforce = associations,limits -> these ARE enforced.
+  account: faculty
+  GrpTRES:
+    cpu: 64
+    gres_gpu: 3
+    mem: 128G
+  MaxJobs: 5
+  qos_listed: [cpu-short, debug]
+  fairshare: {raw_shares: 1, norm_shares: 0.0526, fairshare_factor: 0.1905}
+
+  shared_pool_warning: >-
+    GrpTRES is a GROUP limit across the WHOLE `faculty` account, which several
+    students share. If a labmate is using 2 GPUs, only 1 remains for us. Likewise
+    MaxJobs=5 is 5 jobs for everyone, not 5 each. Coordinate before launching
+    anything large, and prefer array jobs throttled with `%N`.
+
+  hard_consequences:
+    - "mem must never exceed 128G in any single request — the earlier 256G plan for the 70B was impossible"
+    - "at most 3 GPUs total, so Llama-3.3-70B at tp=2 works but leaves 1 GPU for everyone else"
+    - "cpus-per-task summed across running jobs must stay under 64"
+
+  UNVERIFIED_QOS_RISK:
+    status: MUST_TEST_BEFORE_PLANNING_GPU_WORK
+    observation: "the QOS column lists only `cpu-short` and `debug`"
+    question: >-
+      QOS and partition are different things in Slurm, and the gpu-* partitions
+      may or may not be reachable under those QOS entries. GrpTRES grants
+      gres/gpu=3, which implies GPU work is intended — but implication is not
+      permission.
+    test: "srun --partition=gpu-short --gres=gpu:1 --time=00:02:00 nvidia-smi"
+    on_failure: "ask the CSIS admin to add a gpu QOS to the faculty association"
+
+resource_plan:     # sized against the REAL limits above
+  small_models:    # <= 14B, bf16, tp=1 — one A100 80GB is ample
     models: [qwen25-3b, mistral7b-v03, qwen25-7b, llama31-8b, gemma2-9b, qwen25-14b]
+    partition: gpu-short          # 8 h limit; plenty for a pilot
     gpus: 1
-    gpu_min_vram_gb: 40
+    gres: "gpu:a100-80gb:1"
     cpus_per_task: 8
-    mem_gb: 64
+    mem: 64G
     time: "04:00:00"
-  ceiling_model:   # 70B bf16 needs ~141 GB of weights + KV cache
+  ceiling_model:   # 70B bf16 ~141 GB -> 2 x A100 80GB
     models: [llama33-70b]
+    partition: gpu-1day           # 24 h limit
     gpus: 2
-    gpu_min_vram_gb: 80
+    gres: "gpu:a100-80gb:2"
     tensor_parallel_size: 2
     cpus_per_task: 16
-    mem_gb: 256
+    mem: 120G                     # CORRECTED from 256G — the group cap is 128G
     time: "12:00:00"
   nli_d2:
+    partition: gpu-short
     gpus: 1
-    gpu_min_vram_gb: 24
     cpus_per_task: 8
-    mem_gb: 32
+    mem: 32G
     time: "02:00:00"
+  judge_d3:        # microsoft/phi-4, 14B bf16
+    partition: gpu-long
+    gpus: 1
+    cpus_per_task: 8
+    mem: 64G
+    time: "08:00:00"
   cpu_only:        # canonicalisation, D0, D1, metrics, bootstrap
+    partition: cpu-short
     gpus: 0
     cpus_per_task: 16
-    mem_gb: 32
+    mem: 32G
     time: "02:00:00"
+  smoke_test:
+    partition: gpu-short
+    gpus: 1
+    cpus_per_task: 8
+    mem: 64G
+    time: "00:40:00"
 
 fallback:          # §4.13 documented fallback
   status: not_active

@@ -2,7 +2,7 @@
 
 **Kind:** METHODOLOGY
 
-**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL (also blocked on Q8 tooling)
+**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL. **Q8 is now settled by fact:** the cluster probe (2026-09-25) confirms R is absent, so glmmTMB is not available and PyMC is the only option.
 **Date:** 2026-09-11
 
 ## Context
@@ -15,8 +15,8 @@ beta-binomial GLMM with nested random effects.
 Fit in **PyMC**: beta-binomial likelihood, fixed effects per §4.11, random
 intercepts for `schema/constraint` and `domain`, weakly informative priors
 documented in the preregistration. Report posterior means and 95% credible
-intervals. If R + `glmmTMB` turns out to be available on the cluster, fit it as
-a cross-check and report both.
+intervals. There is **no cross-check available**: R does not exist on either machine, so
+the paper must report the PyMC fit alone and say why.
 
 The confirmatory claim is unaffected either way: §4.11 gives precedence to the
 cluster bootstrap, and the GLMM carries only secondary and exploratory analyses.

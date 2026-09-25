@@ -159,3 +159,58 @@ Implemented **only** as an offline simulation in
 semantics unit-tested in `tests/unit/test_polar_mapping_sim.py` (23 tests). The
 production canonicaliser, D1 and the schemas are untouched pending the
 simulation results.
+
+---
+
+## 7. Simulation results — pilot job 11969, Qwen2.5-3B, K=8
+
+Offline recompute of the 96 existing responses. No new inference.
+
+| | current | proposed |
+|---|---|---|
+| canonicalisation rate | 66.7% | **94.8%** (still FAIL, by one response) |
+| recovered responses | — | **27** |
+| remaining INVALID | 32 | **5** |
+| D1 coverage | 0.253 | **0.571** |
+| mean PSCR | 0.185 | **0.321** |
+| perfect-model artifact | **0.643** | **0.000** |
+
+**The 32 INVALIDs, by cause:** 27 polarity mapping · 4 polar-cloze on boolean
+constraints · 1 genuine (`K-C4-SCI-01-P04` answered *"Albert Einstein"* to a
+year question).
+
+### The artifact scrambled per-constraint ordering, in both directions
+
+| constraint | current | proposed | |
+|---|---|---|---|
+| K-C1-GEO-01 | 0.667 | 0.250 | ↓ old value was 2 of 3 evaluable pairs |
+| K-C1-POL-01 | 0.000 | 0.000 | = |
+| K-C1-SCI-01 | 0.000 | 0.476 | ↑ the gold-symbol contradiction |
+| K-C2-GEO-01 | 0.286 | 0.476 | ↑ |
+| K-C2-POL-01 | **0.533** | **0.000** | ↓↓ highest → perfectly consistent |
+| K-C2-SCI-01 | 0.333 | 0.333 | = |
+| K-C3-GEO-01 | 0.400 | 0.600 | ↑ |
+| K-C3-POL-01 | **0.000** | **0.600** | ↑↑ flawless → among the worst |
+| K-C3-SCI-01 | 0.000 | 0.500 | ↑ |
+| K-C4-GEO-01 | 0.000 | 0.286 | ↑ |
+| K-C4-POL-01 | 0.000 | 0.333 | ↑ |
+| K-C4-SCI-01 | 0.000 | 0.000 | = |
+
+Seven rose, two fell, three unchanged. This is the important part: the error was
+**not a uniform bias that a constant could absorb**. Any RQ2 answer — how
+consistency varies by semantic class, domain or model — computed on the current
+pipeline would be wrong in unpredictable directions.
+
+### Why 94.8% and not 99.0%
+
+Five responses remain INVALID. Four are the polar-cloze form of §5(b); one is a
+genuine off-target answer. Fixing the four cloze probes would give 1/96 INVALID
+= **99.0%**, comfortably past the gate. That is a probe-authoring change inside
+the frozen factor lattice (ADR-0003) and needs a decision, not an edit.
+
+### Interpretation limits
+
+One model, twelve constraints, D1 only. D2/D3/D4 are unimplemented and D4's
+method is unresolved. No human validation exists, so no detector
+precision/recall against gold can be stated. **These numbers validate the
+pipeline, not the models.** PSCR 0.321 is not a finding about Qwen2.5-3B.

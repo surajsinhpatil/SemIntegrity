@@ -205,3 +205,34 @@ def test_no_source_directory_is_hidden_by_gitignore():
         "these source files are excluded by .gitignore and would never be "
         f"committed: {hidden}"
     )
+
+
+def test_inference_backend_matches_adr_0012():
+    """One stack for all models, and it is the one ADR-0012 records.
+
+    Regression test: `backend: transformers` was written by an edit whose anchor
+    silently failed to match, so the config kept saying `vllm` while ADR-0012
+    said otherwise. Nothing caught it until a run tried to import vLLM.
+    """
+    from semintegrity.utils.config import resolve_model_config
+    from semintegrity.utils.paths import p
+
+    names = sorted(f.stem for f in p("configs/models").glob("*.yaml") if not f.stem.startswith("_"))
+    assert len(names) == 7
+
+    backends = {n: resolve_model_config(n).data["backend"] for n in names}
+    assert len(set(backends.values())) == 1, (
+        f"§4.13 requires ONE stack across all models; got {backends}"
+    )
+    assert set(backends.values()) == {"transformers"}, (
+        f"ADR-0012 selects transformers; config says {set(backends.values())}"
+    )
+
+
+def test_adr_0012_is_still_the_accepted_decision():
+    """If the ADR is superseded, the test above must be revisited deliberately."""
+    from semintegrity.utils.paths import p
+
+    adr = p("docs/decisions/ADR-0012-inference-stack.md").read_text(encoding="utf-8")
+    assert "SUPERSEDED" not in adr, "ADR-0012 was superseded; update the backend test"
+    assert "transformers" in adr

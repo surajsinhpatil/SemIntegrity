@@ -20,10 +20,14 @@ generation:
   stop_sequences: ["\n\n", "</s>", "<|eot_id|>", "<end_of_turn>"]
 
 # --- inference backend (§4.13: ONE stack held constant across models) -------
-# vLLM is the sole inference backend for this study. Do not select another
-# backend per model: §4.13 forbids mixing frameworks across models, and the
-# comparison across models is only interpretable if the stack is identical.
-backend: vllm
+# transformers, NOT vLLM. §4.13 requires one stack held constant across models;
+# it does not name an engine. vLLM is unusable on the BITS CSIS cluster: every
+# wheel from 0.22 onward links the CUDA 13 runtime (libcudart.so.13) while the
+# driver is 570.158.01 = CUDA 12.8. See ADR-0012.
+#
+# Do NOT set this per model. A comparison across models is only interpretable if
+# the stack is identical for all of them.
+backend: transformers
 
 # --- serving defaults -------------------------------------------------------
 serving:

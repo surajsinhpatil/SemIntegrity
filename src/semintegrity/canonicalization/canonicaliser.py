@@ -9,11 +9,35 @@ Mapping, per §4.7's table:
 
 ===============================================  ==========================
 Recognised canonical answer                      that answer (label ANSWER)
+Polar answer asserting the complement            that answer (label NEGATED)
 Refusal / "I don't know" / UNKNOWN               ABSTAIN
 Malformed, unparseable or empty                  INVALID
 Multiple mutually exclusive answers in one        AMBIGUOUS
 Timeout (after one retry)                        FAILED
 ===============================================  ==========================
+
+**Polarity mapping (Q21, adopted 2026-09-26).** §4.7 requires that "Is A the X
+of B?" and "What is the X of B?" reach a common canonical space. A probe is
+*polar* iff its ``expected_answer`` is YES/NO, and the model's YES/NO is a claim
+about the proposition the probe asserts::
+
+    affirms = (polarity == affirmative) == (response == YES)
+
+For an entity/date constraint the asserted candidate is the constraint's gold
+answer ``g``: ``affirms`` gives ANSWER(g), otherwise NEGATED(g). For a boolean
+constraint it gives ANSWER("YES") or ANSWER("NO") according to whether the
+proposition holds.
+
+This is a **benchmark-validity correction, not a result**. Without it a
+perfectly self-consistent model — one answering every probe with that probe's
+own ``expected_answer`` — scored PSCR 0.643 rather than 0.000, because an
+affirmative "YES" and a negated "NO" were recorded as different answers and
+compared. ``tests/unit/test_perfect_model_invariant.py`` asserts that floor is
+zero and will fail if it ever returns.
+
+**The probe is a required argument.** Canonicalisation that cannot see what was
+asked is exactly what produced the 0.643 artifact, so the signature makes it
+impossible to omit rather than merely inadvisable.
 
 Two rules are enforced structurally rather than by discipline:
 
@@ -35,11 +59,18 @@ import unicodedata
 from dataclasses import dataclass
 
 from ..schemas.constraint import Constraint
-from ..schemas.enums import AnswerType, ResponseLabel
+from ..schemas.enums import AnswerType, Polarity, ResponseLabel
+from ..schemas.probe import Probe
 from ..schemas.response import CanonicalResponse, RawResponse
 from ..utils.hashing import sha256_text
 
-CANONICALISER_VERSION = "1.0"
+CANONICALISER_VERSION = "1.1"  # 1.1 adds the Q21 polarity mapping
+
+#: Leading tokens accepted as YES / NO on a polar probe. Deliberately short: a
+#: hedged or discursive reply should fall through to answer-space matching or
+#: INVALID rather than be forced into a boolean the model did not commit to.
+_YES_TOKENS = frozenset({"yes", "y", "true", "correct", "right", "affirmative"})
+_NO_TOKENS = frozenset({"no", "n", "false", "incorrect", "wrong", "negative"})
 
 #: Phrases that mark a refusal. Tuned on the DEVELOPMENT split only, then frozen
 #: before test evaluation (§5.6). Matched on a normalised, lower-cased string.
@@ -132,9 +163,9 @@ def _canonicalise_date(text: str, constraint: Constraint) -> list[tuple[str, str
     return hits
 
 
-def canonicalise(raw: RawResponse, constraint: Constraint) -> CanonicalResponse:
+def canonicalise(raw: RawResponse, constraint: Constraint, probe: Probe) -> CanonicalResponse:
     """Map one raw response into the constraint's closed answer space."""
-    result = classify(raw, constraint)
+    result = classify(raw, constraint, probe)
     return CanonicalResponse(
         response_id=raw.response_id,
         constraint_id=raw.constraint_id,
@@ -150,12 +181,42 @@ def canonicalise(raw: RawResponse, constraint: Constraint) -> CanonicalResponse:
     )
 
 
-def classify(raw: RawResponse, constraint: Constraint) -> Stage0Result:
+def is_polar(probe: Probe) -> bool:
+    """Whether the probe asks for YES/NO rather than a member of the answer space.
+
+    Read off `expected_answer`, which the probe generator already records. On the
+    pilot benchmark this is a clean partition and needs no text parsing.
+    """
+    return probe.expected_answer in ("YES", "NO")
+
+
+def parse_yes_no(text: str) -> bool | None:
+    """YES -> True, NO -> False, anything else -> None.
+
+    Deliberately strict: only a LEADING yes/no token counts. "The answer is yes"
+    returns None rather than True — inferring a polar answer from a word buried
+    in a sentence would manufacture data that the model did not commit to.
+    """
+    tokens = normalise(text).split()
+    if not tokens:
+        return None
+    if tokens[0] in _YES_TOKENS:
+        return True
+    if tokens[0] in _NO_TOKENS:
+        return False
+    return None
+
+
+def classify(raw: RawResponse, constraint: Constraint, probe: Probe) -> Stage0Result:
     """The Stage 0 decision, separated from record construction for testing."""
     if raw.constraint_id != constraint.constraint_id:
         raise ValueError(
             f"response {raw.response_id} belongs to {raw.constraint_id}, "
             f"not {constraint.constraint_id}"
+        )
+    if probe.probe_id != raw.probe_id:
+        raise ValueError(
+            f"probe {probe.probe_id} does not match response probe {raw.probe_id}"
         )
 
     # 1. Timeout, after the one permitted retry (§4.7).
@@ -172,7 +233,41 @@ def classify(raw: RawResponse, constraint: Constraint) -> Stage0Result:
     if _ABSTAIN_RE.search(text):
         return Stage0Result(ResponseLabel.ABSTAIN, None, None, (), "refusal or UNKNOWN")
 
-    # 4. Answer-space matching.
+    # 4. Polarity mapping for polar probes (Q21, §4.7). BEFORE answer-space
+    #    matching: on a polar probe the informative token is the yes/no, and the
+    #    entity named in the probe text may also appear in the reply.
+    if is_polar(probe):
+        b = parse_yes_no(text)
+        if b is None:
+            # The probe asked a yes/no question and this is not a yes/no answer,
+            # so it did not answer it. Falling through to answer-space matching
+            # would be actively wrong on a boolean constraint, whose answer space
+            # IS {YES, NO}: "The answer is yes" would match YES literally and
+            # BYPASS the polarity inversion, reintroducing on negated probes the
+            # exact artifact this mapping removes. Uniformly INVALID instead.
+            return Stage0Result(
+                ResponseLabel.INVALID, None, None, (),
+                f"polar probe ({probe.polarity.value}) answered with no "
+                "recognisable YES/NO",
+            )
+        else:
+            affirms = (probe.polarity is Polarity.AFFIRMATIVE) == b
+            if constraint.answer_type is AnswerType.BOOLEAN:
+                value = "YES" if affirms else "NO"
+                return Stage0Result(
+                    ResponseLabel.ANSWER, value, text, (value,),
+                    f"polar {probe.polarity.value} probe answered "
+                    f"{'YES' if b else 'NO'} -> proposition {'holds' if affirms else 'fails'}",
+                )
+            g = constraint.gold_answer
+            label = ResponseLabel.ANSWER if affirms else ResponseLabel.NEGATED
+            return Stage0Result(
+                label, g, text, (g,),
+                f"polar {probe.polarity.value} probe answered "
+                f"{'YES' if b else 'NO'} -> {'' if affirms else 'NOT '}{g}",
+            )
+
+    # 5. Answer-space matching.
     hits = (
         _canonicalise_date(text, constraint)
         if constraint.answer_type is AnswerType.DATE

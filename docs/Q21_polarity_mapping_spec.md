@@ -1,13 +1,14 @@
 # Q21 — Stage 0 polarity mapping: formal specification
 
-**Status:** SPECIFICATION ONLY — not implemented, not adopted.
+**Status:** ADOPTED AND IMPLEMENTED in production Stage 0, 2026-09-26.
+Researcher approved it as a **benchmark-validity correction, not a result**.
 **Date:** 2026-09-25
 **Approved in principle:** researcher chose the polarity-normalised mapping and
 the "not-X contradicts any definite X" pair rule (2026-09-25), and directed that
 it be formalised and simulated offline before any canonicaliser change.
 
-Nothing in `src/` has been changed. The 95% CANON threshold and the
-preregistration are untouched.
+The 95% CANON threshold, the probe definitions and the preregistration are
+**untouched**. Raw pilot outputs are preserved; nothing was regenerated.
 
 ---
 
@@ -214,3 +215,51 @@ One model, twelve constraints, D1 only. D2/D3/D4 are unimplemented and D4's
 method is unresolved. No human validation exists, so no detector
 precision/recall against gold can be stated. **These numbers validate the
 pipeline, not the models.** PSCR 0.321 is not a finding about Qwen2.5-3B.
+
+
+---
+
+## 8. Implementation notes (2026-09-26)
+
+Adopted into production. `CANONICALISER_VERSION` 1.0 → **1.1**, so the
+canonicaliser hash written onto every record changes and outputs produced before
+and after are distinguishable.
+
+| change | file |
+|---|---|
+| `NEGATED` response label | `schemas/enums.py` |
+| `NEGATED` carries a `canonical_answer`; `is_evaluable` accepts it | `schemas/response.py` |
+| polarity mapping; `probe` is a **required** argument | `canonicalization/canonicaliser.py` |
+| pair rule for `NEGATED` | `detectors/d1/exact_match.py` |
+| passes probes; `NEGATED` counts as answered-but-wrong | `analysis/pilot_report.py` |
+
+**`probe` is required, not optional.** Canonicalisation that cannot see what was
+asked is precisely what produced the 0.643 artifact, so the signature makes the
+mistake impossible rather than merely discouraged.
+
+**One rule tightened during implementation.** A polar probe whose answer does not
+parse as YES/NO is now `INVALID` rather than falling through to answer-space
+matching. A test caught why this matters: on a boolean constraint the answer
+space *is* `{YES, NO}`, so `"The answer is yes"` matched `YES` literally and
+**bypassed the polarity inversion** — reintroducing on negated probes the exact
+artifact the mapping removes. Failing closed is uniform across answer types and
+never manufactures an answer the model did not give.
+
+**D0 is unchanged and still `ANSWER`-only.** A symbolic predicate evaluates a
+definite answer against the knowledge base; "not Canberra" supplies no value.
+Widening D0 to reason over complements is a new methodological choice, not an
+implementation detail, so it was left alone. The consequence is a D0 coverage
+gap on polar probes answered against the asserted candidate, which
+`d0_symbolic.yaml` requires be reported as a result rather than absorbed.
+
+**Tests.** `tests/unit/test_perfect_model_invariant.py` runs production Stage 0
+and D1 over the real 12-constraint benchmark and asserts PSCR 0.000 everywhere,
+plus that coverage is 1.0 (so the invariant cannot pass vacuously) and that a
+deliberately inconsistent model is still detected (so the rule cannot pass by
+never firing). `tests/unit/test_polarity_mapping.py` covers affirmative and
+negated polar probes across entity, date and boolean, including every
+double-negation row. 312 tests pass.
+
+The offline simulation and its tests were removed: with the mapping in
+production they compared production against itself and would have been
+misleading.

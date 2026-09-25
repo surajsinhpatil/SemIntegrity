@@ -126,6 +126,11 @@ class Quantifier(StrEnum):
 # --- Stage 0 canonicalisation (§4.7) --------------------------------------
 class ResponseLabel(StrEnum):
     ANSWER = "ANSWER"
+    #: A polar probe whose answer asserts the COMPLEMENT of the named candidate:
+    #: "Is Canberra the capital?" -> "no". The response is meaningful and
+    #: evaluable, but it fixes only what the answer is NOT. Added 2026-09-25 as
+    #: part of the Q21 polarity mapping.
+    NEGATED = "NEGATED"
     ABSTAIN = "ABSTAIN"
     INVALID = "INVALID"
     AMBIGUOUS = "AMBIGUOUS"
@@ -133,8 +138,8 @@ class ResponseLabel(StrEnum):
 
 
 #: Labels that make a response unusable for pairwise contradiction detection.
-#: A pair is evaluable iff BOTH responses are ANSWER (Q6, pending confirmation
-#: at Phase 4 preregistration).
+#: A pair is evaluable iff BOTH responses carry a resolved answer, i.e. ANSWER
+#: or NEGATED (Q6, pending confirmation at Phase 4 preregistration).
 NON_EVALUABLE_LABELS = frozenset(
     {ResponseLabel.ABSTAIN, ResponseLabel.INVALID, ResponseLabel.AMBIGUOUS, ResponseLabel.FAILED}
 )

@@ -35,7 +35,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.allow_stub:
         assert_no_stub_responses(args.raw, context="the pilot report")
 
-    constraints = {c.constraint_id: c for c in load_split(data_path("benchmark") / args.split)[0]}
+    cons_list, probe_list = load_split(data_path("benchmark") / args.split)
+    constraints = {c.constraint_id: c for c in cons_list}
+    probes = {p.probe_id: p for p in probe_list}
     raws = [RawResponse.model_validate(r) for r in read_jsonl(args.raw)]
     if not raws:
         print(f"no responses in {args.raw}")
@@ -45,7 +47,11 @@ def main(argv: list[str] | None = None) -> int:
     for r in raws:
         if r.constraint_id not in constraints:
             raise KeyError(f"response references unknown constraint {r.constraint_id}")
-        by_constraint[r.constraint_id].append(canonicalise(r, constraints[r.constraint_id]))
+        if r.probe_id not in probes:
+            raise KeyError(f"response references unknown probe {r.probe_id}")
+        by_constraint[r.constraint_id].append(
+            canonicalise(r, constraints[r.constraint_id], probes[r.probe_id])
+        )
 
     rows, labels = [], Counter()
     for cid, canon in sorted(by_constraint.items()):
@@ -54,21 +60,31 @@ def main(argv: list[str] | None = None) -> int:
         results = check_all_pairs(canon)
         evaluable = [r for r in results if r.verdict is not Verdict.NOT_APPLICABLE]
         contradictions = sum(r.is_contradiction for r in results)
-        answered = [x for x in canon if x.label is ResponseLabel.ANSWER]
-        correct = sum(x.canonical_answer == c.gold_answer for x in answered)
-        cluster = Counter(x.canonical_answer for x in answered)
+        # A NEGATED response asserted "not g". It IS an answer — the model
+        # committed to something — but it is factually wrong whenever g is the
+        # gold answer, so it counts in the denominator of truth accuracy and
+        # never in the numerator. Folding it into abstention instead would
+        # flatter the model by hiding a wrong answer as a refusal.
+        definite = [x for x in canon if x.label is ResponseLabel.ANSWER]
+        negated = [x for x in canon if x.label is ResponseLabel.NEGATED]
+        answered = definite + negated
+        correct = sum(x.canonical_answer == c.gold_answer for x in definite)
+        cluster = Counter(x.canonical_answer for x in definite)
         rows.append({
             "constraint_id": cid,
             "class": c.constraint_class.value,
             "domain": c.domain.value,
             "n_responses": len(canon),
             "n_answer": len(answered),
+            "n_definite": len(definite),
+            "n_negated": len(negated),
             "n_abstain": sum(x.label is ResponseLabel.ABSTAIN for x in canon),
             "n_pairs": len(results),
             "n_evaluable_pairs": len(evaluable),
             "n_contradictory_pairs": contradictions,
             # PSCR is UNDEFINED with no evaluable pairs — never imputed as 0 (Q6).
             "pscr": (contradictions / len(evaluable)) if evaluable else None,
+            # PCS uses the DEFINITE cluster only: "not Canberra" names no cluster.
             "pcs": (max(cluster.values()) / len(canon)) if cluster else None,
             "truth_accuracy": (correct / len(answered)) if answered else None,
             "abstention_rate": sum(x.label is ResponseLabel.ABSTAIN for x in canon) / len(canon),

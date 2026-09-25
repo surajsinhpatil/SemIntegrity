@@ -12,6 +12,7 @@ from semintegrity.canonicalization.canonicaliser import (
 )
 from semintegrity.detectors.d1.exact_match import check_all_pairs, check_pair, coverage
 from semintegrity.schemas.enums import AnswerType, ConstraintClass, Domain, ResponseLabel, Verdict
+from semintegrity.schemas.probe import Probe
 from semintegrity.schemas.response import Provenance, RawResponse
 from tests.fixtures.responses import canon
 from tests.fixtures.synthetic_benchmark import make_constraint
@@ -47,6 +48,21 @@ def _raw(text: str, *, probe="K-C1-GEO-01-P01", timed_out=False) -> RawResponse:
     )
 
 
+def _probe(probe_id="K-C1-GEO-01-P01", *, expected="Canberra", polarity="affirmative") -> Probe:
+    """An OPEN probe by default, so these tests keep exercising answer-space matching.
+
+    `expected_answer` is what makes a probe polar, so passing expected="YES"/"NO"
+    switches these same helpers onto the Q21 polarity path.
+    """
+    return Probe(
+        constraint_id=probe_id.rsplit("-P", 1)[0], probe_id=probe_id,
+        logical_form="lf", subject="S", predicate="P", object="", time_scope="",
+        quantifier="none", polarity=polarity, answer_type="entity",
+        syntax="declarative", register="formal", directionality="direct",
+        factor_cell_index=0, probe_text="probe text", expected_answer=expected,
+    )
+
+
 # --- the §4.7 mapping table ------------------------------------------------
 @pytest.mark.parametrize(
     "text,expected_label,expected_answer",
@@ -66,13 +82,13 @@ def _raw(text: str, *, probe="K-C1-GEO-01-P01", timed_out=False) -> RawResponse:
     ],
 )
 def test_stage0_mapping(constraint, text, expected_label, expected_answer):
-    result = classify(_raw(text), constraint)
+    result = classify(_raw(text), constraint, _probe())
     assert result.label is expected_label
     assert result.canonical_answer == expected_answer
 
 
 def test_timeout_becomes_failed_after_one_retry(constraint):
-    assert classify(_raw("", timed_out=True), constraint).label is ResponseLabel.FAILED
+    assert classify(_raw("", timed_out=True), constraint, _probe()).label is ResponseLabel.FAILED
 
 
 def test_abstention_is_checked_before_answer_matching(constraint):
@@ -81,20 +97,20 @@ def test_abstention_is_checked_before_answer_matching(constraint):
     Matching first would silently convert refusals into confident answers and
     deflate the abstention rate §4.7 treats as a first-class outcome.
     """
-    result = classify(_raw("I don't know, but possibly Sydney."), constraint)
+    result = classify(_raw("I don't know, but possibly Sydney."), constraint, _probe())
     assert result.label is ResponseLabel.ABSTAIN
     assert result.canonical_answer is None
 
 
 def test_ambiguous_records_every_candidate(constraint):
-    result = classify(_raw("Either Canberra or Melbourne."), constraint)
+    result = classify(_raw("Either Canberra or Melbourne."), constraint, _probe())
     assert result.label is ResponseLabel.AMBIGUOUS
     assert set(result.candidates_found) == {"Canberra", "Melbourne"}
 
 
 def test_substring_collisions_do_not_match(constraint):
     """'Sydneyish' must not match 'Sydney' — word boundaries are enforced."""
-    assert classify(_raw("Sydneyish"), constraint).label is ResponseLabel.INVALID
+    assert classify(_raw("Sydneyish"), constraint, _probe()).label is ResponseLabel.INVALID
 
 
 def test_boolean_answers(constraint):
@@ -102,10 +118,10 @@ def test_boolean_answers(constraint):
         update={"answer_type": AnswerType.BOOLEAN, "answer_space": ["YES", "NO"],
                 "gold_answer": "YES", "answer_aliases": {}}
     )
-    assert classify(_raw("Yes"), c).canonical_answer == "YES"
-    assert classify(_raw("no"), c).canonical_answer == "NO"
-    assert classify(_raw("True"), c).canonical_answer == "YES"
-    assert classify(_raw("Yes and no"), c).label is ResponseLabel.AMBIGUOUS
+    assert classify(_raw("Yes"), c, _probe(expected="YES")).canonical_answer == "YES"
+    assert classify(_raw("no"), c, _probe(expected="YES")).canonical_answer == "NO"
+    assert classify(_raw("True"), c, _probe(expected="YES")).canonical_answer == "YES"
+    assert classify(_raw("Yes and no"), c, _probe(expected="Canberra")).label is ResponseLabel.AMBIGUOUS
 
 
 def test_date_answers(constraint):
@@ -113,13 +129,13 @@ def test_date_answers(constraint):
         update={"answer_type": AnswerType.DATE, "answer_space": ["1901", "1927", "1788"],
                 "gold_answer": "1927", "answer_aliases": {}}
     )
-    assert classify(_raw("1927"), c).canonical_answer == "1927"
-    assert classify(_raw("It was 1927-05-09."), c).canonical_answer == "1927"
-    assert classify(_raw("1066"), c).label is ResponseLabel.INVALID
+    assert classify(_raw("1927"), c, _probe(expected="1927")).canonical_answer == "1927"
+    assert classify(_raw("It was 1927-05-09."), c, _probe(expected="1927")).canonical_answer == "1927"
+    assert classify(_raw("1066"), c, _probe(expected="1927")).label is ResponseLabel.INVALID
 
 
 def test_canonicalise_stamps_a_freeze_hash(constraint):
-    cr = canonicalise(_raw("Canberra"), constraint)
+    cr = canonicalise(_raw("Canberra"), constraint, _probe())
     assert cr.canonicaliser_sha256 == canonicaliser_hash()
     assert len(cr.canonicaliser_sha256) == 64
     assert cr.response_id == "R-" + "a" * 12  # traceable to its source
@@ -128,7 +144,7 @@ def test_canonicalise_stamps_a_freeze_hash(constraint):
 def test_mismatched_constraint_is_rejected(constraint):
     other = make_constraint(ConstraintClass.C2, Domain.HISTORY, 1)
     with pytest.raises(ValueError, match="belongs to"):
-        classify(_raw("Canberra"), other)
+        classify(_raw("Canberra"), other, _probe())
 
 
 def test_normalise_strips_accents_and_punctuation():

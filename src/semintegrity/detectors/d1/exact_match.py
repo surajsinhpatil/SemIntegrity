@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import combinations
 
-from ...schemas.enums import DetectorId, Verdict
+from ...schemas.enums import DetectorId, ResponseLabel, Verdict
 from ...schemas.response import CanonicalResponse, pair_is_evaluable
 from ...utils.ids import pair_id
 
@@ -33,13 +33,58 @@ class D1Result:
         return self.verdict is Verdict.VIOLATION
 
 
+def _negated(r: CanonicalResponse) -> bool:
+    return r.label is ResponseLabel.NEGATED
+
+
 def check_pair(a: CanonicalResponse, b: CanonicalResponse) -> D1Result:
-    """Two canonical answers contradict iff they differ."""
+    """Two canonical answers contradict iff they cannot both be true.
+
+    With the Q21 polarity mapping a response is either a definite answer or the
+    NEGATION of one ("the capital is not Canberra"). The rule generalises
+    "differ = contradict" to cover that, and is symmetric — PSCR counts
+    unordered pairs, so an asymmetric rule would make the metric depend on
+    iteration order:
+
+    ============  ============  ==========================
+    a             b             contradiction?
+    ============  ============  ==========================
+    ANSWER(x)     ANSWER(y)     iff x != y
+    ANSWER(x)     NEGATED(y)    iff x == y
+    NEGATED(x)    NEGATED(y)    never — jointly satisfiable
+    ============  ============  ==========================
+
+    Two negations never conflict: "not Canberra" and "not Sydney" are both true
+    if the answer is Melbourne. Nor does NEGATED(x) conflict with ANSWER(y!=x),
+    which is the case that makes the closed answer space matter — a negation
+    rules out one member, not all the others.
+    """
     pid = pair_id(a.probe_id, b.probe_id)
     if not pair_is_evaluable(a, b):
         return D1Result(
             pid, a.probe_id, b.probe_id, Verdict.NOT_APPLICABLE,
             reason=f"not evaluable: {a.label.value} / {b.label.value}",
+        )
+
+    na, nb = _negated(a), _negated(b)
+    if na and nb:
+        return D1Result(
+            pid, a.probe_id, b.probe_id, Verdict.SATISFIED,
+            reason=f"not {a.canonical_answer!r} and not {b.canonical_answer!r} "
+                   "are jointly satisfiable",
+        )
+    if na or nb:
+        definite, negation = (b, a) if na else (a, b)
+        if definite.canonical_answer == negation.canonical_answer:
+            return D1Result(
+                pid, a.probe_id, b.probe_id, Verdict.VIOLATION,
+                reason=f"{definite.canonical_answer!r} contradicts "
+                       f"not {negation.canonical_answer!r}",
+            )
+        return D1Result(
+            pid, a.probe_id, b.probe_id, Verdict.SATISFIED,
+            reason=f"{definite.canonical_answer!r} is consistent with "
+                   f"not {negation.canonical_answer!r}",
         )
     if a.canonical_answer == b.canonical_answer:
         return D1Result(

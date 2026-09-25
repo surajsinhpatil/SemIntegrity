@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for r in raws:
         c = constraints[r.constraint_id]
-        res = canonicalise(r, c)
+        res = canonicalise(r, c, probes[r.probe_id])
         labels[res.label.value] += 1
         grouped[r.constraint_id].append((r, res))
         p = probes.get(r.probe_id)

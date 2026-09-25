@@ -172,9 +172,10 @@ class CanonicalResponse(BaseModel):
 
     @model_validator(mode="after")
     def _label_answer_coherence(self) -> CanonicalResponse:
-        if self.label is ResponseLabel.ANSWER and not self.canonical_answer:
-            raise ValueError("label ANSWER requires a canonical_answer")
-        if self.label is not ResponseLabel.ANSWER and self.canonical_answer:
+        carries_answer = (ResponseLabel.ANSWER, ResponseLabel.NEGATED)
+        if self.label in carries_answer and not self.canonical_answer:
+            raise ValueError(f"label {self.label.value} requires a canonical_answer")
+        if self.label not in carries_answer and self.canonical_answer:
             raise ValueError(
                 f"label {self.label.value} must not carry a canonical_answer "
                 f"(got {self.canonical_answer!r})"
@@ -185,12 +186,17 @@ class CanonicalResponse(BaseModel):
 
     @property
     def is_evaluable(self) -> bool:
-        """Whether this response can participate in an evaluable pair (Q6)."""
-        return self.label is ResponseLabel.ANSWER
+        """Whether this response can participate in an evaluable pair (Q6).
+
+        NEGATED counts: "the capital is not Canberra" is a definite claim about
+        the world and contradicts "the capital is Canberra". Excluding it would
+        discard exactly the disagreements PSCR exists to count.
+        """
+        return self.label in (ResponseLabel.ANSWER, ResponseLabel.NEGATED)
 
 
 def pair_is_evaluable(a: CanonicalResponse, b: CanonicalResponse) -> bool:
-    """A pair is evaluable iff BOTH responses canonicalise to an ANSWER.
+    """A pair is evaluable iff BOTH responses carry a resolved answer.
 
     Q6 — proposed definition, pending confirmation at Phase 4 preregistration.
     It is defined in exactly one place so the preregistered rule and the code

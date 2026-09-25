@@ -136,6 +136,15 @@ class D0Predicate(ABC):
         Mirrors the proposal's reference implementation: skip ABSTAIN and
         INVALID, then return VIOLATION if anything conflicts.
         """
+        # NEGATED is deliberately NOT usable here, unlike in D1. A symbolic
+        # predicate evaluates a definite answer against the knowledge base, and
+        # "the capital is not Canberra" supplies no value to evaluate. Widening
+        # D0 to reason over complements would be a new methodological choice
+        # (what a predicate does with a set-valued answer), not an implementation
+        # detail, so it is left alone. The consequence is a D0 COVERAGE gap on
+        # polar probes answered against the asserted candidate -- and per
+        # configs/detectors/d0_symbolic.yaml coverage is "a RESULT in its own
+        # right", so it must be reported rather than quietly absorbed.
         usable = [r for r in responses if r.label is ResponseLabel.ANSWER]
         skipped = tuple(r.probe_id for r in responses if r.label is not ResponseLabel.ANSWER)
 

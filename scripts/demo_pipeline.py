@@ -118,7 +118,8 @@ def main() -> int:
         print(f"  rendered prompt: {pv.rendered_prompt[:70]!r}...")
 
         banner(5, "Stage 0 canonicalisation (§4.7)")
-        canon = [canonicalise(r, constraint) for r in raws]
+        by_probe = {p.probe_id: p for p in probes}
+        canon = [canonicalise(r, constraint, by_probe[r.probe_id]) for r in raws]
         for c in canon:
             raw = next(r.raw_text for r in raws if r.probe_id == c.probe_id)
             print(f"    {c.probe_id}  {raw!r:26s} -> {c.label.value:9s} {c.canonical_answer or ''}")

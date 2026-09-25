@@ -97,7 +97,8 @@ def test_full_pipeline(tmp_path, constraint, probes):
     assert p.temperature == 0.0 and p.dtype == "bfloat16" and p.quantisation == "none"
 
     # Stage 0.
-    canon = [canonicalise(r, constraint) for r in raws]
+    by_probe = {p.probe_id: p for p in probes}
+    canon = [canonicalise(r, constraint, by_probe[r.probe_id]) for r in raws]
     labels = [c.label for c in canon]
     assert labels.count(ResponseLabel.ANSWER) == 7
     assert labels.count(ResponseLabel.ABSTAIN) == 1
@@ -143,9 +144,9 @@ def test_backend_failure_is_retried_once_then_recorded(tmp_path, probes):
 
     # §4.7: a timeout, after its one retry, is FAILED.
     from semintegrity.canonicalization.canonicaliser import classify
-    from tests.unit.test_canonicalisation import _raw  # noqa: F401
     c = make_constraint(ConstraintClass.C1, Domain.GEOGRAPHY, 1)
-    assert classify(raws[0], c).label is ResponseLabel.FAILED
+    probe = next(p for p in probes if p.probe_id == raws[0].probe_id)
+    assert classify(raws[0], c, probe).label is ResponseLabel.FAILED
 
 
 def test_stub_output_is_refused_by_analysis(tmp_path, probes):

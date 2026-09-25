@@ -6,8 +6,9 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #
-# Step 2: the ONE-MODEL pilot — 12 pilot constraints x 5 probes on a single
-# model, then Stage 0 and D1. This is the reduced-scope pilot the professor
+# Step 2: the ONE-MODEL pilot — 12 pilot constraints x 8 probes (K=8, the
+# design primary) on a single model, then Stage 0 and D1. The reduced-scope
+# pilot the professor
 # advised: the proposal's Phase 3 uses 3 models, and this runs the first one.
 #
 #   sbatch --partition=<from probe> --gres=gpu:1 slurm/20_pilot_one_model.sbatch
@@ -30,7 +31,7 @@ if [[ ! -f "${PILOT_DIR}/constraints.jsonl" ]]; then
 fi
 
 echo "--- preflight: validate the pilot benchmark ---"
-python3 -m semintegrity.benchmark.validate --split pilot --k 5 || exit 3
+python3 -m semintegrity.benchmark.validate --split pilot || exit 3
 
 echo
 echo "--- inference: ${MODEL} ---"

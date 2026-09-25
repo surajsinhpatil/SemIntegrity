@@ -62,12 +62,35 @@ def cuda_probe_allowed() -> bool:
     return in_allocation and has_devices
 
 
-def gpu_model() -> str:
-    """Names of the visible GPUs, or why there are none.
+def apple_silicon_name() -> str:
+    """Chip name from sysctl, e.g. "Apple M4"."""
+    import subprocess
 
-    Never probes the CUDA runtime outside an allocation — see
-    :func:`cuda_probe_allowed`.
+    try:
+        out = subprocess.run(
+            ["sysctl", "-n", "machdep.cpu.brand_string"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return out.stdout.strip() or "apple-silicon"
+    except Exception:
+        return "apple-silicon"
+
+
+def gpu_model() -> str:
+    """Names the compute device, or why there is none.
+
+    Never probes the CUDA runtime outside an allocation (see
+    :func:`cuda_probe_allowed`). Apple MPS needs no such gate — it is local
+    hardware with no scheduler in front of it — and is reported distinctly so
+    that a run on a laptop is never mistaken for a run on the cluster.
     """
+    try:
+        import torch
+
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            return f"apple-mps:{apple_silicon_name()}"
+    except Exception:
+        pass
     if not cuda_probe_allowed():
         return "no-gpu-allocation"
     try:

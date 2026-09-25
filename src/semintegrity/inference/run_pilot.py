@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--stub", action="store_true",
                     help="deterministic stub backend; output is FAKE and rejected by analysis")
     ap.add_argument("--backend", default=None, help="override configs/models/_defaults.yaml")
+    ap.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"])
     args = ap.parse_args(argv)
 
     setup_logging()
@@ -48,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from .backend import make_backend
 
-    backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "transformers"))
+    backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "vllm"))
     if backend_name == "stub":
         backend = make_backend("stub", default="UNKNOWN")
     else:
@@ -57,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
             model_id=cfg.data["model_id"], revision=cfg.data["revision"],
             dtype=cfg.data["dtype"], max_model_len=cfg.data["serving"]["max_model_len"],
             seed=cfg.data["generation"]["seed"],
+            **({"device": args.device} if backend_name == "transformers" else {}),
         )
 
     from .chat_template import audit_tokenizer

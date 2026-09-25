@@ -41,7 +41,17 @@ SMOKE_PROMPTS: tuple[str, ...] = (
 
 
 def _require_allocation(force: bool) -> None:
+    """Refuse to start a CUDA run outside Slurm.
+
+    A local Apple-MPS run is legitimate and unrestricted — there is no scheduler
+    in front of it — so the guard only applies where CUDA would be used.
+    """
     if os.environ.get("SLURM_JOB_ID") or force:
+        return
+    from .backend import detect_device
+
+    if detect_device() == "mps":
+        print("running locally on Apple MPS (no Slurm allocation needed)")
         return
     sys.exit(
         "REFUSING TO RUN: no SLURM_JOB_ID in the environment.\n\n"
@@ -63,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         help="use the deterministic stub backend (pipeline test only; output is NOT model output)",
     )
     parser.add_argument("--backend", default=None, help="override configs/models/_defaults.yaml")
+    parser.add_argument("--device", default="auto", choices=["auto", "cuda", "mps", "cpu"])
     args = parser.parse_args(argv)
 
     setup_logging()
@@ -81,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
           f"  merge: {cfg.data['system_merge_strategy']}")
     from .backend import make_backend
 
-    backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "transformers"))
+    backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "vllm"))
     print(f"  backend    : {'STUB (fake output)' if args.stub else backend_name}")
     print("=" * 70)
 
@@ -95,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             dtype=cfg.data["dtype"],
             max_model_len=cfg.data["serving"]["max_model_len"],
             seed=cfg.data["generation"]["seed"],
+            **({"device": args.device} if backend_name == "transformers" else {}),
         )
 
     # Verify the declared system-role support against the real chat template.

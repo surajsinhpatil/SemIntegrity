@@ -2,8 +2,14 @@
 
 **Kind:** METHODOLOGY
 
-**Status:** PROPOSED — AWAITING RESEARCHER APPROVAL
+**Status:** REJECTED by the researcher, 2026-09-25 — superseded by ADR-0013
 **Date:** 2026-09-25
+
+> **Rejected.** The researcher directed that vLLM remain the sole inference
+> backend. The claim below that "every published wheel from 0.22 onward" links
+> CUDA 13 is also factually wrong in one direction that matters: the search
+> stopped at 0.22 and never went lower. vLLM **0.19.1** links `libcudart.so.12`
+> and runs on this driver. See ADR-0013.
 
 ## Context
 §4.13 requires "a single inference stack, since mixing frameworks across models

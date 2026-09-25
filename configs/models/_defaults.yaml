@@ -19,6 +19,12 @@ generation:
   seed: 20250058
   stop_sequences: ["\n\n", "</s>", "<|eot_id|>", "<end_of_turn>"]
 
+# --- inference backend (§4.13: ONE stack held constant across models) -------
+# vLLM is the sole inference backend for this study. Do not select another
+# backend per model: §4.13 forbids mixing frameworks across models, and the
+# comparison across models is only interpretable if the stack is identical.
+backend: vllm
+
 # --- serving defaults -------------------------------------------------------
 serving:
   tensor_parallel_size: 1

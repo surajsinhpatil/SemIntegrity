@@ -71,8 +71,39 @@ print(f"bf16 matmul on device: OK (checksum {checksum:.1f})")
 PY
 
 echo
+echo "--- 2b. vLLM imports and links the CUDA 12 runtime ---"
+# vLLM is the SOLE inference backend (ADR-0013). An environment test that
+# reports success while vLLM cannot import is the fail-open pattern this
+# project has been bitten by repeatedly: a check that cannot run has not passed.
+python3 - <<'VLLMCHK' || { echo "vLLM CHECK FAILED — do not submit inference jobs"; exit 1; }
+import pathlib, sys
+try:
+    import vllm
+except Exception as exc:
+    sys.exit(
+        f"vLLM does not import: {type(exc).__name__}: {exc}\n"
+        "If this is libcudart.so.13, an incompatible vLLM is installed. "
+        "Fix: bash scripts/cluster/fix_torch_cuda.sh"
+    )
+print("vllm", vllm.__version__)
+
+root = pathlib.Path(vllm.__file__).parent
+bad = []
+for so in root.rglob("*.so"):
+    try:
+        if b"libcudart.so.13" in so.read_bytes():
+            bad.append(so.relative_to(root))
+    except OSError:
+        continue
+if bad:
+    sys.exit(f"vLLM links libcudart.so.13 in {len(bad)} object(s), e.g. {bad[0]}")
+print("vLLM links no libcudart.so.13: OK")
+VLLMCHK
+
+echo
 echo "--- 3. project config loads and unit tests pass ---"
-python3 -m pytest -q -m "not gpu and not network" || echo "UNIT TESTS FAILED"
+python3 -m pytest -q -m "not gpu and not network" \
+  || { echo "UNIT TESTS FAILED — the environment is not usable"; exit 1; }
 
 echo
 echo "--- 4. weight cache location and free space ---"

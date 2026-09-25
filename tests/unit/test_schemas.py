@@ -205,6 +205,11 @@ def test_raw_response_is_immutable():
 
 
 # --- CUDA probing must never block outside an allocation -------------------
+def _is_valid_device_label(label: str) -> bool:
+    """A local Apple-MPS device is a legitimate answer; a CUDA probe is not."""
+    return label == "no-gpu-allocation" or label.startswith("apple-mps:")
+
+
 def test_cuda_is_not_probed_outside_a_slurm_allocation(monkeypatch):
     """Regression test for a hang.
 
@@ -212,6 +217,10 @@ def test_cuda_is_not_probed_outside_a_slurm_allocation(monkeypatch):
     `torch.cuda.is_available()` BLOCKS rather than returning False. Once torch
     was installed, that hung the whole test suite. Provenance collection must
     therefore never touch the CUDA runtime outside a granted allocation.
+
+    Apple MPS is exempt: it is local hardware with no scheduler in front of it,
+    and it is reported distinctly so a laptop run is never mistaken for a
+    cluster run.
     """
     from semintegrity.inference import provenance
 
@@ -219,7 +228,7 @@ def test_cuda_is_not_probed_outside_a_slurm_allocation(monkeypatch):
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     monkeypatch.delenv(provenance.FORCE_CUDA_PROBE_ENV, raising=False)
     assert provenance.cuda_probe_allowed() is False
-    assert provenance.gpu_model() == "no-gpu-allocation"
+    assert _is_valid_device_label(provenance.gpu_model())
 
     # An allocation with no devices is still not a reason to probe.
     monkeypatch.setenv("SLURM_JOB_ID", "12345")
@@ -231,34 +240,55 @@ def test_cuda_is_not_probed_outside_a_slurm_allocation(monkeypatch):
     assert provenance.cuda_probe_allowed() is True
 
 
-def test_gpu_model_never_calls_into_torch_outside_an_allocation(monkeypatch):
-    """Prove it by making any torch import explode."""
-    import builtins
+def test_cuda_runtime_is_never_touched_outside_an_allocation(monkeypatch):
+    """Prove it by making torch.cuda.is_available() explode.
+
+    The earlier version of this test blocked `import torch` entirely, which no
+    longer expresses the intent: MPS detection legitimately imports torch. What
+    must never happen outside an allocation is a call into the CUDA runtime.
+    """
+    import torch
 
     from semintegrity.inference import provenance
 
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
 
-    real_import = builtins.__import__
+    def exploding():
+        raise AssertionError("the CUDA runtime must not be touched outside an allocation")
 
-    def exploding(name, *args, **kwargs):
-        if name == "torch":
-            raise AssertionError("torch must not be imported outside an allocation")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", exploding)
-    assert provenance.gpu_model() == "no-gpu-allocation"
+    monkeypatch.setattr(torch.cuda, "is_available", exploding)
+    assert _is_valid_device_label(provenance.gpu_model())
 
 
-def test_software_matrix_is_safe_on_a_login_node(monkeypatch):
+def test_software_matrix_is_safe_outside_an_allocation(monkeypatch):
     from semintegrity.inference.provenance import software_matrix
 
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
     sw = software_matrix()
-    assert sw["gpu_model"] == "no-gpu-allocation"
+    assert _is_valid_device_label(sw["gpu_model"])
     assert set(sw) == {
         "transformers_version", "vllm_version", "torch_version",
         "cuda_version", "gpu_model",
     }
+
+
+def test_device_detection_prefers_cuda_then_mps(monkeypatch):
+    """`auto` must never pick CUDA outside an allocation."""
+    from semintegrity.inference.backend import detect_device
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    assert detect_device() in {"mps", "cpu"}
+    assert detect_device("cuda") == "cuda"  # explicit choice is honoured
+
+
+def test_cpu_generation_is_refused():
+    """§4.6 comparability: CPU bf16 behaves differently and would be unusably slow."""
+    import pytest as _pytest
+
+    from semintegrity.inference.backend import assert_bf16_supported
+
+    with _pytest.raises(RuntimeError, match="refusing to run on CPU"):
+        assert_bf16_supported("cpu")

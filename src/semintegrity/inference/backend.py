@@ -187,6 +187,52 @@ class VLLMBackend:
         return results
 
 
+def detect_device(preference: str = "auto") -> str:
+    """Pick the compute device.
+
+    ``auto`` prefers CUDA inside a Slurm allocation, then Apple MPS, then CPU.
+    CUDA is only *probed* inside an allocation — on this cluster's login node the
+    call blocks (see :mod:`semintegrity.inference.provenance`).
+    """
+    if preference != "auto":
+        return preference
+    try:
+        import torch
+    except ImportError:  # pragma: no cover
+        return "cpu"
+
+    from .provenance import cuda_probe_allowed
+
+    if cuda_probe_allowed() and torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def assert_bf16_supported(device: str) -> None:
+    """§4.6 requires bf16 for every evaluated model. Verify, do not assume.
+
+    Checked by running a real bf16 matmul rather than trusting a capability
+    flag, because a dtype that silently degrades to fp32 would make results
+    incomparable across devices without anything appearing wrong.
+    """
+    import torch
+
+    if device == "cpu":
+        raise RuntimeError(
+            "refusing to run on CPU: generation would be impractically slow and "
+            "bf16 behaviour differs from both CUDA and MPS"
+        )
+    try:
+        x = torch.randn(64, 64, dtype=torch.bfloat16, device=device)
+        out = (x @ x).float().sum().item()
+    except Exception as exc:
+        raise RuntimeError(f"bf16 is not usable on {device}: {exc}") from exc
+    if out != out:  # NaN
+        raise RuntimeError(f"bf16 matmul on {device} produced NaN")
+
+
 class TransformersBackend:
     """HuggingFace `transformers` generation. The default stack on this cluster.
 
@@ -212,7 +258,8 @@ class TransformersBackend:
         *,
         revision: str,
         dtype: str = "bfloat16",
-        device_map: str = "auto",
+        device: str = "auto",
+        device_map: str | None = None,
         max_model_len: int = 2048,
         seed: int = 0,
     ) -> None:
@@ -234,7 +281,12 @@ class TransformersBackend:
         self.model_id = model_id
         self.revision = revision
         self.max_model_len = max_model_len
+        self.device = detect_device(device)
+        assert_bf16_supported(self.device)
         torch.manual_seed(seed)
+        log.info(
+            "device selected", extra={"extra_fields": {"device": self.device, "dtype": dtype}}
+        )
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
         # Decoder-only batch generation needs LEFT padding: with right padding the
@@ -245,9 +297,18 @@ class TransformersBackend:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self._torch = torch
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_id, revision=revision, dtype=torch.bfloat16, device_map=device_map
-        )
+        # device_map="auto" shards across multiple CUDA devices. On MPS there is
+        # exactly one device and the accelerate path is unnecessary, so the model
+        # is moved explicitly instead.
+        if self.device == "cuda":
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_id, revision=revision, dtype=torch.bfloat16,
+                device_map=device_map or "auto",
+            )
+        else:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_id, revision=revision, dtype=torch.bfloat16
+            ).to(self.device)
         self.model.eval()
         log.info(
             "transformers backend ready",
@@ -267,7 +328,7 @@ class TransformersBackend:
         enc = self.tokenizer(
             list(prompts), return_tensors="pt", padding=True, truncation=True,
             max_length=self.max_model_len, add_special_tokens=False,
-        ).to(self.model.device)
+        ).to(self.model.device)  # follows device_map when CUDA shards the model
 
         gen_kwargs: dict[str, Any] = {
             "max_new_tokens": max_new_tokens,
@@ -289,6 +350,10 @@ class TransformersBackend:
         started = time.monotonic()
         with torch.inference_mode():
             out = self.model.generate(**enc, **gen_kwargs)
+        if self.device == "mps":
+            # MPS queues work asynchronously; without this the timing would
+            # measure submission rather than execution.
+            torch.mps.synchronize()
         elapsed_ms = (time.monotonic() - started) * 1000 / max(len(prompts), 1)
 
         prompt_len = enc["input_ids"].shape[1]

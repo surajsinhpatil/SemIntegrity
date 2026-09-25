@@ -187,6 +187,144 @@ class VLLMBackend:
         return results
 
 
+class TransformersBackend:
+    """HuggingFace `transformers` generation. The default stack on this cluster.
+
+    §4.13 requires "a single inference stack, since mixing frameworks across
+    models would introduce an uncontrolled variable". It does not require vLLM,
+    and on the BITS CSIS cluster vLLM is unusable: every published wheel from
+    0.22 onward links CUDA 13 (`libcudart.so.13`), while the driver is 570.158.01
+    = CUDA 12.8. Transformers runs on the cu128 torch build that does work.
+
+    The workload suits it. Track A generations are capped at 24 new tokens
+    (§4.4.3), every model up to 14B fits on one A100 80GB in bf16, and vLLM's
+    advantage — continuous batching over long sequences — is not what this study
+    stresses. D4's teacher-forced candidate scoring (§4.8.6) is also more direct
+    here than through a serving engine.
+
+    See docs/decisions/ADR-0012-inference-stack.md. Switching stacks is a
+    decision with methodological surface, so it is recorded and awaits approval.
+    """
+
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        revision: str,
+        dtype: str = "bfloat16",
+        device_map: str = "auto",
+        max_model_len: int = 2048,
+        seed: int = 0,
+    ) -> None:
+        if not revision or revision.startswith(STUB_PREFIX):
+            raise ValueError(
+                f"refusing to load {model_id} without a real pinned revision "
+                "(§4.5 requires pinned open-weight revisions); run "
+                "scripts/models/pin_revisions.py first"
+            )
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+        except ImportError as exc:  # pragma: no cover - GPU nodes only
+            raise RuntimeError("torch and transformers are required") from exc
+
+        if dtype != "bfloat16":
+            raise ValueError(f"§4.6 requires bf16 for every evaluated model, got {dtype!r}")
+
+        self.model_id = model_id
+        self.revision = revision
+        self.max_model_len = max_model_len
+        torch.manual_seed(seed)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+        # Decoder-only batch generation needs LEFT padding: with right padding the
+        # pad tokens sit between the prompt and the continuation, so shorter
+        # prompts in a batch generate from padding rather than from their text.
+        self.tokenizer.padding_side = "left"
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        self._torch = torch
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_id, revision=revision, dtype=torch.bfloat16, device_map=device_map
+        )
+        self.model.eval()
+        log.info(
+            "transformers backend ready",
+            extra={"extra_fields": {"model_id": model_id, "revision": revision, "dtype": dtype}},
+        )
+
+    def generate(self, prompts: Sequence[str], **kwargs: Any) -> list[Generation]:  # pragma: no cover
+        import time
+
+        torch = self._torch
+        temperature = float(kwargs.get("temperature", 0.0))
+        max_new_tokens = int(kwargs.get("max_new_tokens", 24))
+        stops = list(kwargs.get("stop_sequences", []))
+        if (seed := kwargs.get("seed")) is not None:
+            torch.manual_seed(int(seed))
+
+        enc = self.tokenizer(
+            list(prompts), return_tensors="pt", padding=True, truncation=True,
+            max_length=self.max_model_len, add_special_tokens=False,
+        ).to(self.model.device)
+
+        gen_kwargs: dict[str, Any] = {
+            "max_new_tokens": max_new_tokens,
+            "pad_token_id": self.tokenizer.pad_token_id,
+        }
+        if temperature == 0.0:
+            gen_kwargs["do_sample"] = False
+        else:
+            gen_kwargs.update(
+                do_sample=True,
+                temperature=temperature,
+                top_p=float(kwargs.get("top_p", 1.0)),
+            )
+            if (top_k := int(kwargs.get("top_k", -1))) > 0:
+                gen_kwargs["top_k"] = top_k
+        if (rp := float(kwargs.get("repetition_penalty", 1.0))) != 1.0:
+            gen_kwargs["repetition_penalty"] = rp
+
+        started = time.monotonic()
+        with torch.inference_mode():
+            out = self.model.generate(**enc, **gen_kwargs)
+        elapsed_ms = (time.monotonic() - started) * 1000 / max(len(prompts), 1)
+
+        prompt_len = enc["input_ids"].shape[1]
+        results: list[Generation] = []
+        for row in out:
+            new_ids = row[prompt_len:]
+            text = self.tokenizer.decode(new_ids, skip_special_tokens=True)
+            truncated = _apply_stops(text, stops)
+            results.append(
+                Generation(
+                    text=truncated,
+                    finish_reason="stop" if truncated != text else "length",
+                    n_generated_tokens=int(new_ids.shape[0]),
+                    latency_ms=elapsed_ms,
+                )
+            )
+        return results
+
+
+def _apply_stops(text: str, stops: Sequence[str]) -> str:
+    """Truncate at the earliest stop sequence, as a serving engine would."""
+    cut = len(text)
+    for stop in stops:
+        if stop and (idx := text.find(stop)) != -1:
+            cut = min(cut, idx)
+    return text[:cut]
+
+
+def make_backend(name: str, **kwargs: Any) -> Backend:
+    """Construct the configured backend. One stack for every model (§4.13)."""
+    backends = {"transformers": TransformersBackend, "vllm": VLLMBackend, "stub": StubBackend}
+    if name not in backends:
+        raise ValueError(f"unknown backend {name!r}; known: {sorted(backends)}")
+    return backends[name](**kwargs)  # type: ignore[abstract]
+
+
 # --- stub containment -------------------------------------------------------
 def is_stub(model_id: str) -> bool:
     return model_id.startswith(STUB_PREFIX)

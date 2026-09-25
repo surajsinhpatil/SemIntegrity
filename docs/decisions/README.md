@@ -38,6 +38,7 @@ is classified as **METHODOLOGY**. The tie-break is deliberate.
 | 0009 | **METHODOLOGY** | Disaggregated binomial cells | **APPROVED 2026-09-11** |
 | 0010 | ENGINEERING | Researcher runs all cluster commands | ACCEPTED |
 | 0011 | ENGINEERING | Frozen knowledge-base cache architecture | ACCEPTED |
+| 0012 | **METHODOLOGY** | transformers, not vLLM, as the inference stack | PROPOSED — awaiting approval |
 
 Status values: `PROPOSED — AWAITING RESEARCHER APPROVAL` · `APPROVED` ·
 `ACCEPTED` (engineering only) · `SUPERSEDED BY ADR-nnnn` · `REJECTED`

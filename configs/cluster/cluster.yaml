@@ -156,7 +156,8 @@ software:
     torch: "2.11.0+cu128"
     torchvision: "0.26.0+cu128"
     torchaudio: "2.11.0+cu128"
-    vllm: "0.26.0"        # last release pinning torch==2.11.0
+    vllm: "UNUSABLE"      # every wheel >=0.22 links libcudart.so.13; driver is CUDA 12.8
+    inference_stack: transformers   # ADR-0012
     transformers: "5.17.0"
     note: >-
       vLLM is version-pinned deliberately. Letting pip take the newest release

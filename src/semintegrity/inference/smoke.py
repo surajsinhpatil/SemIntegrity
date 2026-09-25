@@ -62,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         "--stub", action="store_true",
         help="use the deterministic stub backend (pipeline test only; output is NOT model output)",
     )
+    parser.add_argument("--backend", default=None, help="override configs/models/_defaults.yaml")
     args = parser.parse_args(argv)
 
     setup_logging()
@@ -78,24 +79,21 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  dtype      : {cfg.data['dtype']}  quantisation: {cfg.data['quantisation']}")
     print(f"  system role: {cfg.data['supports_system_role']}"
           f"  merge: {cfg.data['system_merge_strategy']}")
-    print(f"  backend    : {'STUB (fake output)' if args.stub else 'vLLM'}")
+    from .backend import make_backend
+
+    backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "transformers"))
+    print(f"  backend    : {'STUB (fake output)' if args.stub else backend_name}")
     print("=" * 70)
 
-    if args.stub:
-        from .backend import StubBackend
-
-        backend = StubBackend(default="Paris")
+    if backend_name == "stub":
+        backend = make_backend("stub", default="Paris")
     else:
-        from .backend import VLLMBackend
-
-        serving = cfg.data["serving"]
-        backend = VLLMBackend(
-            cfg.data["model_id"],
+        backend = make_backend(
+            backend_name,
+            model_id=cfg.data["model_id"],
             revision=cfg.data["revision"],
             dtype=cfg.data["dtype"],
-            tensor_parallel_size=serving["tensor_parallel_size"],
-            gpu_memory_utilization=serving["gpu_memory_utilization"],
-            max_model_len=serving["max_model_len"],
+            max_model_len=cfg.data["serving"]["max_model_len"],
             seed=cfg.data["generation"]["seed"],
         )
 

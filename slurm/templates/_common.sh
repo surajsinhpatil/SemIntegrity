@@ -20,9 +20,24 @@ export PYTHONHASHSEED=0
 # UNRESOLVED until the cluster probe reports the module system. Set
 # SEMINT_ENV_ACTIVATE to the correct command in configs/cluster/cluster.yaml
 # and export it from the submit script.
+# SEMINT_ENV_ACTIVATE may be either a conda PREFIX or a script to source.
+# Conda's hook scripts are not `set -u` safe — this cluster's
+# deactivate.d/unset_pythonpath.sh reads an unset variable and would abort the
+# job — so nounset is relaxed around them and restored straight after.
 if [[ -n "${SEMINT_ENV_ACTIVATE:-}" ]]; then
-  # shellcheck disable=SC1090
-  source "${SEMINT_ENV_ACTIVATE}"
+  set +u
+  if [[ -d "${SEMINT_ENV_ACTIVATE}" ]]; then
+    module load miniconda/default 2>/dev/null || true
+    # shellcheck disable=SC1091
+    source "$(conda info --base)/etc/profile.d/conda.sh"
+    conda activate "${SEMINT_ENV_ACTIVATE}"
+  else
+    # shellcheck disable=SC1090
+    source "${SEMINT_ENV_ACTIVATE}"
+  fi
+  set -u
+  echo "environment    : ${CONDA_PREFIX:-${SEMINT_ENV_ACTIVATE}}"
+  echo "python         : $(command -v python3)"
 else
   echo "WARNING: SEMINT_ENV_ACTIVATE is unset; relying on the inherited environment" >&2
 fi
@@ -35,7 +50,10 @@ job_provenance() {
   echo "node          : ${SLURMD_NODENAME:-$(hostname)}"
   echo "partition     : ${SLURM_JOB_PARTITION:-none}"
   echo "cpus_per_task : ${SLURM_CPUS_PER_TASK:-unset}"
-  echo "gpus          : ${SLURM_GPUS_ON_NODE:-${CUDA_VISIBLE_DEVICES:-none}}"
+  echo "gpus_on_node  : ${SLURM_GPUS_ON_NODE:-unset}"
+  # ConstrainDevices=no on this cluster: cgroups do NOT fence GPUs between jobs,
+  # so the only record of which devices are ours is this variable. Log it.
+  echo "CUDA_VISIBLE_DEVICES = ${CUDA_VISIBLE_DEVICES:-unset}"
   echo "start_utc     : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git_commit    : $(git -C "$SEMINT_ROOT" rev-parse HEAD 2>/dev/null || echo 'not-a-git-repo')"
   echo "git_dirty     : $(git -C "$SEMINT_ROOT" status --porcelain 2>/dev/null | wc -l) files"

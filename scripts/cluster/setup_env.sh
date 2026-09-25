@@ -26,6 +26,17 @@ WITH_GPU=0
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[33m!!  %s\033[0m\n' "$*" >&2; }
 
+# Conda's and Lmod's hook scripts are not `set -u` safe. This cluster ships
+# etc/conda/deactivate.d/unset_pythonpath.sh, which reads $CONDA_OLD_PYTHONPATH
+# with no default and aborts the whole script under `set -u`. It exists because
+# the cluster exports a global PYTHONPATH for Intel oneAPI.
+#
+# So: relax nounset around third-party hooks only, and restore it immediately.
+# The alternative — dropping `set -u` for the whole script — would lose the
+# protection everywhere else.
+nounset_off() { set +u; }
+nounset_on()  { set -u; }
+
 # --- refuse to run inside a compute allocation -----------------------------
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
   warn "This is running inside Slurm job ${SLURM_JOB_ID}."
@@ -50,13 +61,20 @@ printf '  CONDA_PKGS_DIRS=%s\n  PIP_CACHE_DIR=%s\n  HF_HOME=%s\n  TMPDIR=%s\n' \
 
 # --- conda ------------------------------------------------------------------
 say "Loading miniconda module"
+nounset_off
 module load miniconda/default 2>/dev/null || warn "module load failed; trying conda on PATH"
+nounset_on
 command -v conda >/dev/null || { warn "conda not found; run 'module avail' and adjust"; exit 3; }
 conda --version
 
 CONDA_BASE="$(conda info --base)"
+nounset_off
 # shellcheck disable=SC1091
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
+# Leave any environment that is already active, so `conda activate` below does
+# not have to run a deactivate hook mid-script.
+while [[ -n "${CONDA_PREFIX:-}" ]]; do conda deactivate || break; done
+nounset_on
 
 if [[ -d "$ENV_PREFIX" ]]; then
   say "Environment already exists at ${ENV_PREFIX} — reusing it"
@@ -64,10 +82,18 @@ else
   say "Creating Python ${PY_VERSION} environment at ${ENV_PREFIX}"
   # 3.11 deliberately: the system python is 3.6.8 (far too old) and the default
   # module is 3.13.7 (ahead of what vLLM supports). pyproject pins >=3.10,<3.12.
+  nounset_off
   conda create -y -p "$ENV_PREFIX" "python=${PY_VERSION}" pip
+  nounset_on
 fi
 
+nounset_off
 conda activate "$ENV_PREFIX"
+nounset_on
+[[ "${CONDA_PREFIX:-}" == "$ENV_PREFIX" ]] || {
+  warn "expected CONDA_PREFIX=${ENV_PREFIX} but got ${CONDA_PREFIX:-<unset>}"
+  exit 4
+}
 say "Active interpreter"
 python -VV
 which python

@@ -12,7 +12,14 @@ export HF_HOME="${SEMINT_ROOT}/hf_cache"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"     # compute nodes run OFFLINE by default
 export TRANSFORMERS_OFFLINE="${HF_HUB_OFFLINE}"
 export TOKENIZERS_PARALLELISM=false
+# Cap every BLAS backend, not just OpenMP. Compute nodes have 128 cores, and
+# numpy/scipy otherwise spawn one thread per core at import — slow at best,
+# stalled at worst. Bound by what Slurm actually allocated.
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-8}"
+export OPENBLAS_NUM_THREADS="${OMP_NUM_THREADS}"
+export MKL_NUM_THREADS="${OMP_NUM_THREADS}"
+export NUMEXPR_NUM_THREADS="${OMP_NUM_THREADS}"
+export VECLIB_MAXIMUM_THREADS="${OMP_NUM_THREADS}"
 export PYTHONPATH="${SEMINT_ROOT}/src:${PYTHONPATH:-}"
 export PYTHONHASHSEED=0
 

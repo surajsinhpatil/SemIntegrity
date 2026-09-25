@@ -54,6 +54,17 @@ export PIP_CACHE_DIR="${ROOT}/.pip-cache"
 export HF_HOME="${ROOT}/hf_cache"
 export TMPDIR="${ROOT}/.tmp"
 export XDG_CACHE_HOME="${ROOT}/.cache"
+
+# Thread caps. The login node reports 128 CPUs, and OpenBLAS/MKL spawn one
+# thread per core when numpy/scipy first load their BLAS backends. On a machine
+# this wide that initialisation can take minutes or stall outright — it is what
+# hung the test suite at the first scipy import. Nothing here is numerically
+# parallel enough to care: the work is I/O and small statistics.
+export OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
+export OPENBLAS_NUM_THREADS=${OPENBLAS_NUM_THREADS:-4}
+export MKL_NUM_THREADS=${MKL_NUM_THREADS:-4}
+export NUMEXPR_NUM_THREADS=${NUMEXPR_NUM_THREADS:-4}
+export VECLIB_MAXIMUM_THREADS=${VECLIB_MAXIMUM_THREADS:-4}
 mkdir -p "$CONDA_PKGS_DIRS" "$PIP_CACHE_DIR" "$HF_HOME" "$TMPDIR" "$XDG_CACHE_HOME"
 say "Caches redirected into the project (shared account is left untouched)"
 printf '  CONDA_PKGS_DIRS=%s\n  PIP_CACHE_DIR=%s\n  HF_HOME=%s\n  TMPDIR=%s\n' \
@@ -158,7 +169,7 @@ LOCK="${ROOT}/requirements/lock/cluster-$([[ $WITH_GPU -eq 1 ]] && echo gpu || e
 say "Lock file written: ${LOCK#"${ROOT}/"} ($(wc -l < "$LOCK") lines)"
 
 # --- verify -----------------------------------------------------------------
-say "Running the test suite"
+say "Running the test suite (threads capped at ${OMP_NUM_THREADS})"
 cd "$ROOT"
 python -m pytest -q -m "not gpu and not network" || warn "TESTS FAILED — do not submit jobs yet"
 

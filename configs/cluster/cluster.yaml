@@ -146,6 +146,24 @@ software:
       the 570.158.01 driver, which supports CUDA 12.8+ and is backward
       compatible with the cu13x runtime.
 
+  blas_thread_hazard:
+    observed: "2026-09-25 — pytest stalled at the first `import scipy.stats`"
+    cause: >-
+      Login and compute nodes both report 128 CPUs. OpenBLAS and MKL size their
+      thread pool when the shared library loads, defaulting to one thread per
+      core, and on a machine this wide that initialisation stalls. The cluster
+      also puts Intel oneAPI MKL on LD_LIBRARY_PATH by default, so scipy may
+      bind to MKL rather than OpenBLAS.
+    fix: >-
+      OMP_NUM_THREADS, OPENBLAS_NUM_THREADS, MKL_NUM_THREADS,
+      NUMEXPR_NUM_THREADS and VECLIB_MAXIMUM_THREADS are capped in
+      tests/conftest.py (before any import), scripts/cluster/setup_env.sh and
+      slurm/templates/_common.sh. Inside Slurm the cap follows
+      SLURM_CPUS_PER_TASK rather than a fixed number.
+    cost: >-
+      None for this project. The workload is I/O plus small statistics; no step
+      is numerically parallel enough to benefit from 128 BLAS threads.
+
   login_node_gpu_policy:
     gpu_access_blocked: true
     consequence: >-

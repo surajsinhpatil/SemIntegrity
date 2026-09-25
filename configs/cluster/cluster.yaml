@@ -134,17 +134,34 @@ software:
 
   # Resolved by `setup_env.sh --gpu` on 2026-09-25. Exact pins are in
   # requirements/lock/cluster-gpu.txt (247 packages).
+  cuda_build_constraint:
+    driver: "570.158.01"
+    driver_cuda: "12.8"
+    required_wheel_variant: cu128
+    rule: >-
+      CUDA 13 wheels need a 580+ driver. This cluster is on 570, so every torch
+      build MUST be cu12x. Installed with:
+        pip install --index-url https://download.pytorch.org/whl/cu128 \
+          torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0
+    first_attempt_failed:
+      installed: "torch 2.13.0+cu130 via vllm 0.30.0"
+      error: "The NVIDIA driver on your system is too old (found version 12080)"
+      cause: >-
+        `pip install vllm` takes the newest release; vLLM >= 0.27 pins
+        torch==2.13.0, whose default PyPI wheel is cu130. The mismatch is
+        invisible on the login node and only appears on a GPU node.
+
   installed_stack:
     python: "3.11"
-    torch: "2.13.0+cu130"
-    vllm: "0.30.0"
+    torch: "2.11.0+cu128"
+    torchvision: "0.26.0+cu128"
+    torchaudio: "2.11.0+cu128"
+    vllm: "0.26.0"        # last release pinning torch==2.11.0
     transformers: "5.17.0"
-    tokenizers: "0.23.2"
     note: >-
-      torch was NOT pinned separately — vLLM pins its own, and forcing a
-      mismatch would surface only at model-load time. cu130 wheels run against
-      the 570.158.01 driver, which supports CUDA 12.8+ and is backward
-      compatible with the cu13x runtime.
+      vLLM is version-pinned deliberately. Letting pip take the newest release
+      silently changes the CUDA build, which §4.13 forbids: a single inference
+      stack, held constant across all models.
 
   blas_thread_hazard:
     observed: "2026-09-25 — pytest stalled at the first `import scipy.stats`"

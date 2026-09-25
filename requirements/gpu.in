@@ -2,8 +2,13 @@
 # CUDA version is known — see requirements/README.md. Placeholders are ranges,
 # NOT verified pins. Do not treat as reproducible until locked.
 -r login.in
-torch                      # PIN AFTER CLUSTER PROBE (CUDA-dependent)
-vllm                       # PIN AFTER CLUSTER PROBE (must support Gemma-2 soft-capping)
+# PINNED 2026-09-25 against the BITS CSIS driver (570.158.01 = CUDA 12.8).
+# CUDA 13 wheels need a 580+ driver, so cu12x is mandatory here. Install with:
+#   pip install --index-url https://download.pytorch.org/whl/cu128 torch==2.11.0 ...
+torch==2.11.0             # +cu128 build
+torchvision==0.26.0       # +cu128 build
+torchaudio==2.11.0        # +cu128 build
+vllm==0.26.0              # last release pinning torch==2.11.0; newer pins 2.13.0/cu130
 transformers>=4.44         # >=4.42 required for Gemma-2; 4.44+ safer
 tokenizers>=0.19
 accelerate>=0.33

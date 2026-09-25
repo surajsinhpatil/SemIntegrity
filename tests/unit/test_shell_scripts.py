@@ -93,3 +93,27 @@ def test_no_head_on_a_pipe_under_pipefail(script):
         "SIGPIPE and abort the script (exit 141):\n"
         + "\n".join(f"  line {n}: {line}" for n, line in offenders)
     )
+
+
+def test_job_preamble_keeps_every_cache_inside_the_work_dir():
+    """Shared lab account: nothing may be written outside work_dir.
+
+    configs/cluster/cluster.yaml:shared_account_rules is explicit about this, and
+    the tools default the other way. Job 11968 (2026-09-25) wrote a vLLM
+    torch_compile_cache to /nfs_home/users/yashsinha/.cache/vllm before these
+    were pinned. These caches are also part of the reproducible environment, so
+    they belong beside everything else that gets synced.
+    """
+    common = p("slurm/templates/_common.sh").read_text(encoding="utf-8")
+    for var in (
+        "HF_HOME",
+        "XDG_CACHE_HOME",
+        "VLLM_CACHE_ROOT",
+        "TORCHINDUCTOR_CACHE_DIR",
+        "TRITON_CACHE_DIR",
+    ):
+        assert f"export {var}=" in common, f"_common.sh does not pin {var}"
+        line = next(ln for ln in common.splitlines() if ln.startswith(f"export {var}="))
+        assert "${SEMINT_ROOT}" in line, (
+            f"{var} is not rooted at SEMINT_ROOT, so it can escape work_dir: {line}"
+        )

@@ -23,6 +23,17 @@ fi
 export HF_HOME="${SEMINT_ROOT}/hf_cache"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"     # compute nodes run OFFLINE by default
 export TRANSFORMERS_OFFLINE="${HF_HUB_OFFLINE}"
+# vLLM, torch.compile/inductor and triton all default to $HOME/.cache, which on
+# this SHARED lab account is outside work_dir and breaks the first rule in
+# configs/cluster/cluster.yaml:shared_account_rules. Observed 2026-09-25: job
+# 11968 wrote a torch_compile_cache to /nfs_home/users/yashsinha/.cache/vllm.
+# These caches are also part of the reproducible environment, so they belong
+# beside everything else we sync and archive.
+export XDG_CACHE_HOME="${SEMINT_ROOT}/.cache"
+export VLLM_CACHE_ROOT="${SEMINT_ROOT}/.cache/vllm"
+export TORCHINDUCTOR_CACHE_DIR="${SEMINT_ROOT}/.cache/torchinductor"
+export TRITON_CACHE_DIR="${SEMINT_ROOT}/.cache/triton"
+mkdir -p "$XDG_CACHE_HOME" "$VLLM_CACHE_ROOT" "$TORCHINDUCTOR_CACHE_DIR" "$TRITON_CACHE_DIR"
 export TOKENIZERS_PARALLELISM=false
 # Cap every BLAS backend, not just OpenMP. Compute nodes have 128 cores, and
 # numpy/scipy otherwise spawn one thread per core at import — slow at best,

@@ -148,9 +148,62 @@ say "Installing torch ${TORCH_VERSION}+cu128 from ${CU_INDEX}"
 python -m pip install --index-url "$CU_INDEX" \
   "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" "torchaudio==${TORCHAUDIO_VERSION}"
 
+say "Repairing any nvidia package whose files the purge clobbered"
+# Several nvidia wheels install into the SAME directory: nvidia-cusparselt-cu12
+# and nvidia-cusparselt-cu13 both write site-packages/nvidia/cusparselt/lib/.
+# Uninstalling the cu13 one deletes the shared directory contents, taking the
+# cu12 .so with it while leaving cu12's METADATA intact. pip then sees cu12 as
+# "already installed" at a satisfying version and skips it, so torch ends up
+# with a recorded dependency that has no files:
+#
+#   ImportError: libcusparseLt.so.0: cannot open shared object file
+#
+# Observed 2026-09-25: exactly one package (nvidia-cusparselt-cu12 0.7.1) was
+# hit, because the others happened to need a version bump and were genuinely
+# reinstalled. Which packages collide depends on the versions present, so this
+# detects rather than hard-codes: compare each nvidia package's RECORD against
+# the filesystem and force-reinstall only what is actually missing.
+REPAIR_LIST="${TMPDIR}/nvidia-repair.txt"
+python - "$REPAIR_LIST" <<'PY'
+import importlib.metadata as md, pathlib, sys
+out = pathlib.Path(sys.argv[1])
+broken = {}
+for d in md.distributions():
+    name = d.metadata["Name"] or ""
+    if not name.lower().startswith("nvidia-"):
+        continue
+    for f in (d.files or []):
+        if ".so" in str(f) and not pathlib.Path(d.locate_file(f)).exists():
+            broken[name] = d.version
+            break
+for n, v in sorted(broken.items()):
+    print(f"  MISSING FILES: {n}=={v}")
+out.write_text("\n".join(f"{n}=={v}" for n, v in sorted(broken.items())))
+print(f"  {len(broken)} package(s) need repair")
+PY
+if [ -s "$REPAIR_LIST" ]; then
+  # shellcheck disable=SC2046
+  python -m pip install --force-reinstall --no-deps $(tr '\n' ' ' < "$REPAIR_LIST")
+else
+  echo "  nothing to repair"
+fi
+
 say "Verifying the CUDA build BEFORE installing vLLM"
 python - <<'PY'
-import sys, torch
+import sys
+try:
+    import torch
+except ImportError as exc:
+    # A missing libXXX.so.N here means a shared CUDA library is absent, not that
+    # torch is uninstalled. The repair step above should have caught it; if this
+    # still fires, the library belongs to a package whose RECORD also lost the
+    # entry, so re-run with an explicit reinstall of that nvidia-* package.
+    sys.exit(
+        f"\ntorch is installed but cannot import: {exc}\n"
+        "This is a MISSING SHARED LIBRARY, not a CUDA-version problem.\n"
+        "Identify the owning package and force-reinstall it, e.g.\n"
+        "  python -m pip install --force-reinstall --no-deps nvidia-<lib>-cu12==<version>"
+    )
 cuda = torch.version.cuda or ""
 print(f"  torch {torch.__version__}  built for CUDA {cuda}")
 if (cuda.split(".")[0] if cuda else "") != "12":

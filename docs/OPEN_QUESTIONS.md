@@ -424,6 +424,56 @@ negated probes as two separate paraphrase sets per constraint, comparing within
 but never across. That halves the pairs per constraint from 28 to 12 and removes
 the negation-sensitivity finding §5.5 promises.
 
+### Empirical evidence from the first cluster pilot (2026-09-25, job 11969)
+
+This stopped being hypothetical. Qwen2.5-3B, 96 probes, K=8, on the A100:
+
+```
+ANSWER 46 (47.9%) · INVALID 32 (33.3%) · ABSTAIN 18 (18.8%)
+canonicalisation rate 66.7%  -- CANON go/no-go requires >= 95%  -> FAIL
+```
+
+INVALID is structural, not noise:
+
+| cell | INVALID rate |
+|---|---|
+| `answer_type=entity` | 58.3% |
+| `answer_type=date` | 58.3% |
+| `answer_type=boolean` | 8.3% |
+| `directionality=reverse` | 45.8% |
+| `directionality=direct` | 20.8% |
+
+28 of the 32 are polar answers to non-boolean constraints, e.g.
+
+```
+K-C1-GEO-01 [entity] space ['Canberra','Sydney','Melbourne']
+  P02 [affirmative/interrogative/reverse]
+      asked: Is Canberra the capital city of Australia?
+      said : 'yes'   -> INVALID
+```
+
+**The discarded third contains the signal the study exists to measure.** Reading
+those answers under the mapping proposed above:
+
+* `K-C1-SCI-01`: P05/P06/P08 -> "Au", but P02 `'NO'` and P07 `'YES'` -> "not Au".
+  The model contradicts itself about gold's symbol across equivalent probes.
+* `K-C4-GEO-01`: four probes -> 1927, but P05 `'YES'` to *"Is it false that...1927?"* -> not-1927.
+* `K-C4-POL-01`: three -> 1789, P04 `'NO'` -> not-1789.
+
+So **PSCR 0.185 from this run is very likely an underestimate with a known
+direction**: contradictions are being converted into INVALID and dropped, not
+counted. Coverage was 0.253.
+
+**What this does and does not settle.** The directionality half is already
+specified by §4.7 and is an implementation gap, not a decision. The polarity
+half is this question. They cannot be implemented separately: P08
+`[negated/interrogative/reverse]` needs both. A third case is undecided by
+either -- affirmative + `NO` maps to `¬X`, a *set* rather than a member of the
+closed answer space, which needs Q6's definition of an evaluable pair.
+
+Reproduce with:
+`python scripts/analysis/inspect_stage0.py --raw results/raw/pilot/qwen25-3b.jsonl --split pilot`
+
 ---
 
 ## Q22 — D0's reference implementation is set-level; PSCR is pairwise

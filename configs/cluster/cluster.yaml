@@ -131,6 +131,28 @@ software:
   cuda_module: cuda/12.8
   torch_module: pytorch/2.10
   nvcc_on_login_node: false            # expected; cuda module not loaded by default
+
+  # Resolved by `setup_env.sh --gpu` on 2026-09-25. Exact pins are in
+  # requirements/lock/cluster-gpu.txt (247 packages).
+  installed_stack:
+    python: "3.11"
+    torch: "2.13.0+cu130"
+    vllm: "0.30.0"
+    transformers: "5.17.0"
+    tokenizers: "0.23.2"
+    note: >-
+      torch was NOT pinned separately — vLLM pins its own, and forcing a
+      mismatch would surface only at model-load time. cu130 wheels run against
+      the 570.158.01 driver, which supports CUDA 12.8+ and is backward
+      compatible with the cu13x runtime.
+
+  login_node_gpu_policy:
+    gpu_access_blocked: true
+    consequence: >-
+      `torch.cuda.is_available()` BLOCKS here rather than returning False, which
+      hung the test suite once torch was installed. Provenance collection now
+      probes CUDA only inside an allocation that was granted devices
+      (semintegrity.inference.provenance.cuda_probe_allowed).
   cuda_version: "12.8 (module)"
   driver_version: UNKNOWN_ON_LOGIN_NODE   # nvidia-smi is blocked here by policy
   python_available: "3.13.7 via module, 3.6.8 system"

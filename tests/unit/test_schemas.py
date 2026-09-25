@@ -202,3 +202,63 @@ def test_raw_response_is_immutable():
     with pytest.raises(ValueError):
         r.raw_text = "Sydney"  # type: ignore[misc]
     assert r.resume_key() == ("exp", "m", "K-C1-GEO-01-P01", 0)
+
+
+# --- CUDA probing must never block outside an allocation -------------------
+def test_cuda_is_not_probed_outside_a_slurm_allocation(monkeypatch):
+    """Regression test for a hang.
+
+    On the cluster's login node, GPU access is administratively blocked and
+    `torch.cuda.is_available()` BLOCKS rather than returning False. Once torch
+    was installed, that hung the whole test suite. Provenance collection must
+    therefore never touch the CUDA runtime outside a granted allocation.
+    """
+    from semintegrity.inference import provenance
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    monkeypatch.delenv(provenance.FORCE_CUDA_PROBE_ENV, raising=False)
+    assert provenance.cuda_probe_allowed() is False
+    assert provenance.gpu_model() == "no-gpu-allocation"
+
+    # An allocation with no devices is still not a reason to probe.
+    monkeypatch.setenv("SLURM_JOB_ID", "12345")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
+    assert provenance.cuda_probe_allowed() is False
+
+    # An allocation that was granted devices is.
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "0")
+    assert provenance.cuda_probe_allowed() is True
+
+
+def test_gpu_model_never_calls_into_torch_outside_an_allocation(monkeypatch):
+    """Prove it by making any torch import explode."""
+    import builtins
+
+    from semintegrity.inference import provenance
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+
+    real_import = builtins.__import__
+
+    def exploding(name, *args, **kwargs):
+        if name == "torch":
+            raise AssertionError("torch must not be imported outside an allocation")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", exploding)
+    assert provenance.gpu_model() == "no-gpu-allocation"
+
+
+def test_software_matrix_is_safe_on_a_login_node(monkeypatch):
+    from semintegrity.inference.provenance import software_matrix
+
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("CUDA_VISIBLE_DEVICES", raising=False)
+    sw = software_matrix()
+    assert sw["gpu_model"] == "no-gpu-allocation"
+    assert set(sw) == {
+        "transformers_version", "vllm_version", "torch_version",
+        "cuda_version", "gpu_model",
+    }

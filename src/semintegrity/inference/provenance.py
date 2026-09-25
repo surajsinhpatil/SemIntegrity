@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import importlib
+import os
 from typing import Any
 
 from ..schemas.response import Provenance
@@ -26,6 +27,11 @@ def _version(module_name: str) -> str:
 
 
 def cuda_version() -> str:
+    """CUDA version torch was BUILT against.
+
+    Reads a module attribute rather than calling into the driver, so this is
+    safe on a login node — unlike :func:`gpu_model`.
+    """
     try:
         import torch
 
@@ -34,7 +40,36 @@ def cuda_version() -> str:
         return UNAVAILABLE
 
 
+#: Set to "1" to probe CUDA even outside a Slurm allocation. Only for debugging.
+FORCE_CUDA_PROBE_ENV = "SEMINT_FORCE_CUDA_PROBE"
+
+
+def cuda_probe_allowed() -> bool:
+    """Whether it is safe to touch the CUDA runtime here.
+
+    On the BITS CSIS login node, GPU access is administratively blocked — the
+    site wraps nvidia-smi with a refusal message and directs users to Slurm.
+    Under that arrangement ``torch.cuda.is_available()`` does not fail fast; it
+    BLOCKS, which hung the test suite indefinitely once torch was installed.
+
+    So CUDA is probed only where a GPU could legitimately exist: inside a Slurm
+    allocation that was actually granted devices.
+    """
+    if os.environ.get(FORCE_CUDA_PROBE_ENV) == "1":
+        return True
+    in_allocation = bool(os.environ.get("SLURM_JOB_ID"))
+    has_devices = bool(os.environ.get("CUDA_VISIBLE_DEVICES", "").strip())
+    return in_allocation and has_devices
+
+
 def gpu_model() -> str:
+    """Names of the visible GPUs, or why there are none.
+
+    Never probes the CUDA runtime outside an allocation — see
+    :func:`cuda_probe_allowed`.
+    """
+    if not cuda_probe_allowed():
+        return "no-gpu-allocation"
     try:
         import torch
 

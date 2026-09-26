@@ -1,0 +1,29 @@
+You are judging whether two statements about the same question can both be true.
+
+Question under consideration:
+{constraint_text}
+
+Statement A:
+{claim_a}
+
+Statement B:
+{claim_b}
+
+Decide whether A and B are logically compatible.
+
+- CONTRADICTION: A and B cannot both be true.
+- COMPATIBLE: A and B can both be true.
+- UNCLEAR: you cannot determine this from the statements alone.
+
+Judge only the logical relationship between A and B. Do NOT judge which one is
+factually correct, and do NOT use outside knowledge to decide which is right:
+two statements can contradict each other while both are wrong, and that is
+still a CONTRADICTION.
+
+Reply with a single JSON object and nothing else:
+
+{{"label": "CONTRADICTION" | "COMPATIBLE" | "UNCLEAR",
+  "confidence": <number between 0 and 1>,
+  "conflicting_span_a": "<the exact phrase in A that conflicts, or null>",
+  "conflicting_span_b": "<the exact phrase in B that conflicts, or null>",
+  "reason": "<one sentence>"}}

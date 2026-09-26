@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from ..benchmark.loader import load_split
-from ..canonicalization.canonicaliser import canonicalise
+from ..canonicalization.canonicaliser import CANONICALISER_VERSION, canonicalise
 from ..detectors.d1.exact_match import check_all_pairs, coverage
 from ..inference.backend import assert_no_stub_responses
 from ..schemas.enums import ResponseLabel, Verdict
@@ -91,12 +91,24 @@ def main(argv: list[str] | None = None) -> int:
             "d1_coverage": coverage(results),
         })
 
+    # The CANON go/no-go criterion (configs/inference/pilot.yaml) is a
+    # preregistered gate, so the report states it rather than leaving it to be
+    # recomputed by hand. NEGATED and ABSTAIN both count as canonicalised: the
+    # first is a resolved answer, the second a first-class outcome (§4.7).
+    n_total = sum(labels.values())
+    n_invalid = labels.get(ResponseLabel.INVALID, 0)
+    canon_rate = (n_total - n_invalid) / n_total if n_total else 0.0
+
     defined = [r for r in rows if r["pscr"] is not None]
     report = {
         "raw_file": args.raw,
         "n_constraints": len(rows),
         "n_responses": len(raws),
         "stage0_labels": {k.value: v for k, v in labels.items()},
+        "canonicalisation_rate": canon_rate,
+        "canon_gate_threshold": 0.95,
+        "canon_gate_passed": canon_rate >= 0.95,
+        "canonicaliser_version": CANONICALISER_VERSION,
         "constraints_with_undefined_pscr": len(rows) - len(defined),
         "mean_pscr_over_defined": (sum(r["pscr"] for r in defined) / len(defined)) if defined else None,
         "mean_truth_accuracy": _mean(rows, "truth_accuracy"),
@@ -112,6 +124,9 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"responses          : {report['n_responses']}")
     print(f"Stage 0 labels     : {report['stage0_labels']}")
+    gate = "PASS" if report["canon_gate_passed"] else "FAIL"
+    print(f"canonicalisation   : {report['canonicalisation_rate']:.2%}  "
+          f"(CANON gate >= 95%: {gate})   canonicaliser v{CANONICALISER_VERSION}")
     print(f"constraints        : {report['n_constraints']} "
           f"({report['constraints_with_undefined_pscr']} with undefined PSCR)")
     print(f"mean PSCR (D1)     : {_fmt(report['mean_pscr_over_defined'])}")

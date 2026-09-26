@@ -77,10 +77,17 @@ def main(argv: list[str] | None = None) -> int:
     print("=== Stage 0 label distribution ===")
     for lab, n in labels.most_common():
         print(f"  {lab:10s} {n:4d}  {n / total:6.1%}")
-    canonicalised = labels.get("ANSWER", 0) + labels.get("ABSTAIN", 0)
+    # Everything that is not INVALID was successfully canonicalised: ABSTAIN is
+    # a first-class outcome (§4.7) and NEGATED is a resolved answer. Omitting
+    # NEGATED here under-reported the rate as 89.6% when it was 93.75%.
+    canonicalised = total - labels.get("INVALID", 0)
     rate = canonicalised / total if total else 0.0
-    print(f"\n  canonicalisation rate : {rate:.1%}  (CANON go/no-go requires >= 95%)")
-    print(f"  VERDICT               : {'PASS' if rate >= 0.95 else 'FAIL'}")
+    print(f"\n  canonicalised (not INVALID) : {canonicalised}/{total}")
+    print(f"  canonicalisation rate       : {rate:.2%}  (CANON go/no-go requires >= 95%)")
+    print(f"  VERDICT                     : {'PASS' if rate >= 0.95 else 'FAIL'}")
+    for lab in ("AMBIGUOUS", "FAILED"):
+        if labels.get(lab):
+            print(f"  note: {labels[lab]} {lab} response(s) are counted as canonicalised")
 
     print("\n=== INVALID rate by probe factor (is the failure structural?) ===")
     print(f"  {'cell':32s} {'INVALID':>8s} {'total':>7s} {'rate':>7s}")

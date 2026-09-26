@@ -1,6 +1,6 @@
 # SemIntegrity — session handoff
 
-**Updated 2026-09-25, 21:00 IST.** Read this, then `PROJECT_STATUS.md`, then
+**Updated 2026-09-26.** Read this, then `PROJECT_STATUS.md`, then
 `docs/OPEN_QUESTIONS.md`. `proposal/semintegrity_proposal.docx` is the
 authoritative spec and overrides anything here.
 
@@ -9,217 +9,149 @@ authoritative spec and overrides anything here.
 ## The project in one paragraph
 
 **SemIntegrity** — measuring semantic self-inconsistency in LLMs across four
-structured integrity-constraint classes (C1 atomic, C2 conjunctive, C3
-quantified, C4 temporal). M.E. dissertation, BITS Pilani, Surajsinh Patil.
-Three quantities measured jointly: how inconsistency varies by constraint class,
-how reliable the detectors are per class, and how many meaning-preserving probes
-are needed to surface an inconsistency. Factual accuracy, consistency and
-abstention are kept as separate dimensions throughout. Target: 120 constraints
-× K=8 probes × 7 open-weight models, detectors D0–D4 against blinded human
-annotation.
+constraint classes (C1 entity, C2 Boolean, C3 relational/quantified, C4
+temporal). M.E. dissertation, BITS Pilani, Surajsinh Patil. Classes are
+CATEGORICAL, never ordered by difficulty. Target: 120 constraints × K=8 probes ×
+7 open-weight models, detectors D0–D4 against blinded human annotation. Factual
+accuracy, consistency and abstention stay separate dimensions throughout.
 
 ---
 
-## WHAT WE ARE DOING RIGHT NOW
+## WHERE THINGS ACTUALLY STAND
 
-Getting the **first real model output**. One command:
-
-```bash
-cd ~/Desktop/SemIntegrity && python -m semintegrity.inference.smoke --model qwen25-3b --out results/raw/_smoke/local-mps.jsonl
-```
-
-Runs on the MacBook's Apple M4 GPU via MPS. First run downloads Qwen2.5-3B
-(~6 GB, ungated, no token) into `hf_cache/` — that is the slow part. Then 8 real
-prompts with full 22-field provenance.
-
-If that works, the pilot follows immediately:
-
-```bash
-python -m semintegrity.inference.run_pilot --model qwen25-3b --split pilot --out results/raw/pilot/qwen25-3b-mps.jsonl
-python -m semintegrity.analysis.pilot_report --raw results/raw/pilot/qwen25-3b-mps.jsonl --split pilot --out results/analysis/pilot_mps.json
-```
-
-That is 12 constraints × 8 probes → Stage 0 → D1 → **the first PSCR number**.
-
----
-
-## The two-track approach (important)
-
-| | Machine | Purpose | Status |
-|---|---|---|---|
-| **Development** | MacBook Air M4, 16 GB | authoring, pilots, Qwen2.5-3B, all analysis | **working now** |
-| **Final results** | BITS CSIS cluster, A100 80GB | all 7 models, uniform hardware, Phase 6 | **access blocked** |
-
-**Results from the Mac must never appear in the paper** (ADR-0014). Merging is
-technically trivial — append-only JSONL keyed by
-`(experiment_id, model_id, probe_id, sample_index)` — but different kernels give
-different numerics, and inconsistency is the dependent variable. If Qwen-3B ran
-on MPS while 7B and 14B ran on CUDA, the within-family scale axis would be
-confounded with hardware, which is the one comparison it exists to make.
-Provenance records `apple-mps:Apple M4` vs the A100, so mixing is detectable.
-
-Only Qwen2.5-3B (6.2 GB) fits in 16 GB. Quantising the others is forbidden by
-§4.6 — it would confound quantisation with model family.
-
----
-
-## Cluster — currently unreachable
+**Infrastructure is done and verified. The pilot runs. It fails a preregistered
+gate, and that is the current work.**
 
 | | |
 |---|---|
-| Host | `172.24.16.132` port 22, campus network only |
-| Account | `yashsinha` — **SHARED** lab account (Aadit, Swayam, Vineet, Harsh) |
-| Work dir | `/nfs_home/users/yashsinha/H20250058_Suraj` |
-| Hardware | 5 nodes × 2 A100 80GB, 128 CPUs, 240 GB RAM |
-| Limits | **group-wide**: cpu=64, gres/gpu=3, mem=128G, MaxJobs=5 |
-| Driver | 570.158.01 = **CUDA 12.8** — cu12x wheels mandatory |
-| Env there | Python 3.11, torch 2.11.0+cu128, transformers 5.17.0, built and tested |
-| Model | Qwen2.5-3B cached at the pinned revision |
+| Cluster access | ✅ working (researcher runs all commands manually) |
+| vLLM 0.11.2, CUDA-12, on Rocky 8.10 / glibc 2.28 | ✅ ADR-0015 |
+| A100, bf16, pinned revision, fully offline | ✅ |
+| Qwen2.5-3B, 96-probe K=8 pilot | ✅ run TWICE, byte-identical |
+| Q21 polarity mapping in production | ✅ PSCR artifact 0.643 → 0.000 |
+| **CANON gate (≥95%)** | ❌ **93.75%** |
+| D2 / D3 / D4 | ❌ not implemented; D4 method unresolved |
+| Human validation | ❌ not started |
+| Full benchmark (120 × 8 × 7) | ❌ not run |
 
-**Blocked since ~18:30 IST on 2026-09-25.** Port 22 refuses; the subnet gateway
-`172.24.16.1` pings fine, so it is a firewall rule on the host, not a dead
-machine or a network outage. Almost certainly fail2ban after a mistyped username
-earlier.
+**PSCR 0.300 is a pipeline-validation number, not a result about Qwen2.5-3B.**
+One model, one detector, no human gold, gate still failing.
 
-Poll without attempting a login (a failed attempt can restart a ban timer):
+---
+
+## The stack that works (ADR-0015)
+
+vLLM 0.19.1 was IMPOSSIBLE here and ADR-0013 had to be superseded: this host is
+glibc 2.28, and every CUDA-12 vLLM from 0.12.0 on ships `manylinux_2_31`. The
+first `manylinux_2_28` release is 0.22.0, which is already CUDA-13. The only
+overlap is the `manylinux1` line.
+
+| component | version |
+|---|---|
+| vLLM | **0.11.2** (last `manylinux1`; links `libcudart.so.12`) |
+| torch | 2.9.0+cu128 |
+| transformers | 4.57.6 (`>=4.56,<5`, required by vLLM 0.11.2) |
+| Python | 3.11.16 |
+
+Verified from the binary, not the metadata — a wheel's torch pin and its
+dependency markers BOTH mislead here; 0.20.0 and 0.21.0 declare no cu13
+dependency and link `libcudart.so.13` anyway.
+
+The transformers downgrade was measured before being accepted: Qwen2.5-3B at the
+pinned revision renders a byte-identical prompt and the same
+`chat_template_hash` (`cd8e9439…`) under 4.57.6 and 5.0.0, confirmed again
+against a real model load on the cluster.
+
+---
+
+## Cluster runbook
+
 ```bash
-nc -G 8 -vz 172.24.16.132 22
+# Mac: sync (NEVER use --delete; the cluster holds lock files the Mac does not)
+rsync -av --exclude .git --exclude .conda-env --exclude .conda-pkgs \
+  --exclude .pip-cache --exclude .tmp --exclude .cache --exclude hf_cache \
+  --exclude 'results/' --exclude '*.egg-info' --exclude __pycache__ \
+  -e "ssh -o IdentitiesOnly=yes -i $HOME/.ssh/semintegrity_cluster" \
+  ~/Desktop/SemIntegrity/ \
+  yashsinha@172.24.16.132:/nfs_home/users/yashsinha/H20250058_Suraj/
+
+# Cluster: ALWAYS verify the sync landed before spending a GPU
+cd /nfs_home/users/yashsinha/H20250058_Suraj && python -m pytest -q | tail -3
+
+# A fresh pilot MUST set OUT, or resume silently generates nothing
+OUT=results/raw/pilot/qwen25-3b-runN.jsonl \
+  sbatch --partition=gpu-short --gres=gpu:1 slurm/20_pilot_one_model.sbatch
 ```
 
-To unblock: ask a labmate to try from their machine (tells you whether it is your
-IP or the host); ask **Yash Sinha**, whose account it is, who administers the
-cluster; or try a different campus IP.
-
-**Never paste the cluster password into chat.** The researcher runs all cluster
-commands (ADR-0010).
-
-### Cluster workflow when access returns
-```bash
-# Mac tab
-rsync -av --exclude '.git' --exclude 'hf_cache' --exclude '.conda-env' \
-  --exclude '.conda-pkgs' --exclude '.pip-cache' --exclude '.venv' \
-  ~/Desktop/SemIntegrity/ yashsinha@172.24.16.132:/nfs_home/users/yashsinha/H20250058_Suraj/
-
-# Cluster tab — once per shell
-cd /nfs_home/users/yashsinha/H20250058_Suraj && module load miniconda/default && \
-  source $(conda info --base)/etc/profile.d/conda.sh && conda activate ./.conda-env
-
-# Submit (partition is never hard-coded in the job files)
-sbatch --partition=gpu-short --gres=gpu:1 --cpus-per-task=8 --mem=64G slurm/10_smoke_inference.sbatch
-```
+**JIT caches must stay node-local.** Putting Triton/Inductor caches on NFS cost
+five SIGSEGV job failures on 2026-09-26. `_common.sh` now sends them to
+`$SLURM_TMPDIR/semint-jit-$SLURM_JOB_ID`; only `HF_HOME` and `XDG_CACHE_HOME`
+belong in `work_dir`.
 
 ---
 
-## State
+## DECISIONS WAITING ON THE RESEARCHER
 
-**20 commits · 259 tests passing · ruff clean · installed editable on the Mac**
+**1. The four polar-cloze probes — blocks the CANON gate.**
+`"<assertion>: ___"` does not cue YES/NO, so the model completes the sentence
+instead. All six remaining INVALIDs are cloze; four are bare echoes of a noun in
+the prompt (`'Au'`, `'Au'`, `'Canberra'`, `'CANBERRA'`). **Confirmed reproducible
+across two runs.** They are the only reason canonicalisation is 93.75% rather
+than 100%. Rewording touches the factor lattice (ADR-0003). The pilot split is
+DRAFT, not frozen, so no freeze blocks it.
 
-Done:
-* **Phase 0 literature verification** — 12/12 citations resolved (7 verified,
-  4 venue corrections, 1 preprint). `docs/phase0/literature_verification.md`.
-* **Phase 1 infrastructure** — schemas with a verification ladder, design
-  validator, Wikidata client + frozen cache, D0 framework with freeze policy and
-  three-instance audit, probe factor generator.
-* **Pilot benchmark** — 12 constraints, 96 probes, real records in
-  `data/benchmark/pilot/`. All **DRAFT**: 21/21 Wikidata checks pass, no human
-  review, nothing frozen.
-* **Stage 0 canonicaliser, D1 detector, inference runner** with resume.
-* **Cluster fully configured** (when reachable).
+**2. entity/date fall-through on polar probes.** Deferred until after the
+re-run, which has now happened. Strict rule discards `K-C1-GEO-01-P06`
+(`'Melbourne'`), previously a counted contradiction. Allowing fall-through for
+entity/date only — where the answer space is disjoint from {YES,NO} and cannot
+be confused with a polarity inversion — recovers it: 6 → 5 INVALID, 93.75% →
+94.79%. Still short of the gate.
 
-Not done:
-* **No model output yet. Zero experimental results.**
-* No human annotation (~5,721 judgements — `docs/HUMAN_EFFORT_BUDGET.md`).
-* The 120-constraint benchmark is not authored.
-* D2 (NLI), D3 (judge), D4 (distributional) not implemented.
-* No preregistration submitted.
+**3. D2 needs the dev split** (ADR-0007: 24 constraints, disjoint from the 120,
+unauthored). **D4 needs its `distribution_construction` resolved** (Q5).
 
----
-
-## HOW WE PROCEED FROM HERE
-
-**1. Now — first model output (Mac).** Smoke test → pilot → first PSCR. No
-dependencies on anyone.
-
-**2. Then — D2 (NLI).** The NLI model is ~1.5 GB and runs fine on the Mac.
-Needs a dev split to calibrate thresholds on (ADR-0007: 24 constraints, disjoint
-from the 120 — not yet authored).
-
-**3. When the cluster returns** — re-run the pilot on the A100 to confirm the
-Mac and cluster agree, then the remaining six models.
-
-**4. Blocked on the researcher** (any time, no cluster needed):
-   * approve or reject the pending ADRs
-   * decide **Q21** and **Q22**
-   * adjudicate the **1787/1789** discrepancy on the two POL constraints
-   * check the professor's six notes with him
-   * identify a second annotator (~31 hours of their time)
-
-**5. Phase 5** — author the full 120-constraint benchmark. The largest human
-effort, and the real critical path. §4.13 says so outright: the binding resource
-is authoring and annotation, not GPU time.
-
----
-
-## Decisions AWAITING THE RESEARCHER
-
-Six methodology ADRs are `PROPOSED — AWAITING RESEARCHER APPROVAL`:
-0002 (design lattice), 0003 (probe balancing), 0004 (PyMC — forced, no R on the
-cluster), 0006 (Gemma-2 preflight), **0012 (transformers not vLLM)**,
-**0014 (MPS for development only)**.
-
-Two open methodology questions, both concretely visible in the pilot data:
-* **Q21** — is `polarity` inside the probe equivalence key? Currently excluded
-  (`EQUIVALENCE_KEY_FIELDS` in `schemas/probe.py`). Including it drops each
-  constraint from 28 comparable pairs to 12.
-* **Q22** — is "D0" the pairwise verdict or the set-level one? Both implemented
-  and stored, so the decision can wait for data.
-
-**The 1787/1789 discrepancy**: Wikidata gives the US presidency's inception as
-1787; `K-C1-POL-01` and `K-C4-POL-01` concern 1789. Both are blocked from
-EVIDENCE_VERIFIED until a human adjudicates.
-
-**The professor's notes** — from a conversation the researcher only partly
-remembers: *"Rare"*, *"Harry Potter or Harry Styles"*, *"Multiple hops"*,
-*"Competing facts e.g. President of America"*, *"Tool calling"*, and use cases
-*"misinformation spread, toxic content generation"*. My reading: the use cases
-are cheap and strong (§2 framing only); "competing facts" is partly already
-built; **"rare", "Harry Potter/Harry Styles" and "multiple hops" would each
-reopen frozen methodology** — §4.3 deliberately *matches* entity familiarity and
-*requires* unambiguous ground truth, and those point the other way; "tool
-calling" is effectively a second study. **Confirm with the professor before
-building on any of it.**
+Also outstanding from earlier: the 1787/1789 adjudication on the two POL
+constraints, a second annotator (~31 h), and the professor's six notes.
 
 ---
 
 ## Working agreement
 
-* **Never fabricate** results, annotations, literature verification, model
-  outputs or successful job runs.
-* **Methodology and engineering are separate.** Engineering decisions are taken
-  and recorded; methodology decisions are raised in `docs/OPEN_QUESTIONS.md`
-  plus an ADR and **never taken unilaterally** (`docs/decisions/README.md`).
+* **Never fabricate** results, annotations, model outputs or successful runs.
+  Say NOT RUN, PARTIAL or BLOCKED.
+* **Methodology vs engineering.** Engineering decisions are taken and recorded;
+  methodology goes to `docs/OPEN_QUESTIONS.md` plus an ADR and is never decided
+  unilaterally.
 * **Verification ladder**: DRAFT → EVIDENCE_VERIFIED → HUMAN_VALIDATED → FROZEN.
-  The schema *rejects* HUMAN_VALIDATED without a named human and date.
-* `PROJECT_STATUS.md` carries an integrity ledger of claims not yet backed by an
-  artefact.
 
 ---
 
-## Bugs found so far, and the pattern
+## Bugs found, and the pattern
 
-1. **scipy absent → validity check FAILED OPEN**, silently passing the
-   entity-familiarity confound check it never ran.
-2. **`.gitignore` `models/` unanchored** — hid all seven model configs, with
-   their pinned revisions, from git for several sessions.
-3. **128-core BLAS thread explosion** — stalled at the first `import scipy.stats`.
-4. **conda hooks vs `set -u`** — would have killed every Slurm job.
-5. **CUDA 13 wheels vs a CUDA 12.8 driver** — only visible on a GPU node.
-6. **Env test printed a fatal error and exited 0** — same fail-open pattern as (1).
-7. **A config edit whose anchor did not match silently did nothing**, leaving
-   `backend: vllm` contradicting ADR-0012 until a run failed.
+1. scipy absent → validity check FAILED OPEN.
+2. `.gitignore` `models/` unanchored — hid all seven model configs.
+3. 128-core BLAS thread explosion.
+4. conda hooks vs `set -u`.
+5. CUDA 13 wheels vs a CUDA 12.8 driver.
+6. Env test printed a fatal error and exited 0.
+7. A config edit whose anchor did not match silently did nothing.
+8. **A drift guard that could not fire** — it tested for `"SUPERSEDED"` while
+   the ADR said `"superseded"`, so it missed the exact event it existed to catch.
+9. **`| head` under `pipefail`** — SIGPIPE killed the installer at exit 141.
+10. **A co-installed cu13 wheel deleted cu12's `.so`** on uninstall, leaving a
+    recorded package with no files.
+11. **The config said tp=2 and the code passed tp=1** — never plumbed through;
+    would have OOM'd the 70B after a two-GPU queue wait.
+12. **JIT caches on NFS → five SIGSEGV failures.** The run that WROTE the cache
+    succeeded; every run that READ it died.
+13. **A PSCR artifact of 0.643** — a perfectly consistent model scored as
+    two-thirds self-contradictory, because affirmative YES and negated NO were
+    recorded as different answers. It did not merely inflate PSCR, it INVERTED
+    the per-constraint ordering.
 
-Recurring lesson: **a check that cannot run has not passed**, and **an edit that
-matches nothing is an error, not a no-op**. Each now has a regression test.
+**The recurring lesson:** a check that cannot run has not passed — and a test
+can encode a mistake as confidently as a requirement. The test written alongside
+bug 12 asserted the caches belong on NFS, and would have rejected the fix.
 
 ---
 
@@ -227,13 +159,11 @@ matches nothing is an error, not a no-op**. Each now has a regression test.
 
 | Path | What |
 |---|---|
-| `PROJECT_STATUS.md` | live phase board, blockers, integrity ledger |
-| `docs/OPEN_QUESTIONS.md` | 22 questions, 5 resolved |
-| `docs/decisions/` | 13 ADRs, each tagged ENGINEERING or METHODOLOGY |
-| `docs/CLUSTER_RUNBOOK.md` | every cluster command, classified |
-| `docs/PILOT_BENCHMARK_PREVIEW.md` | the 12 constraints, for the professor |
-| `docs/PILOT_EXAMPLES.md` | 3 worked examples with all 8 probes each |
-| `docs/HUMAN_EFFORT_BUDGET.md` | 5,721 judgements, ≈125 hours |
+| `PROJECT_STATUS.md` | phase board, blockers, integrity ledger |
+| `docs/OPEN_QUESTIONS.md` | 22 questions; Q21 now carries the pilot evidence |
+| `docs/Q21_polarity_mapping_spec.md` | the adopted mapping, in full |
+| `docs/decisions/ADR-0015-vllm-0112-glibc228.md` | the inference stack |
 | `configs/cluster/cluster.yaml` | everything known about the cluster |
-| `scripts/benchmark/inspect_pilot.py` | full pilot inspection, read-only |
-| `scripts/demo_pipeline.py` | end-to-end demo, no GPU needed |
+| `scripts/analysis/inspect_stage0.py` | why Stage 0 labelled each response |
+| `scripts/analysis/compare_runs.py` | run-to-run determinism check |
+| `tests/unit/test_perfect_model_invariant.py` | the guard that must never fail |

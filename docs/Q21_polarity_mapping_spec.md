@@ -263,3 +263,50 @@ double-negation row. 312 tests pass.
 The offline simulation and its tests were removed: with the mapping in
 production they compared production against itself and would have been
 misleading.
+
+
+---
+
+## 9. Independent re-run (job 12095, 2026-09-26)
+
+The researcher directed that the mapping be adopted first and the 96 probes
+re-generated with **probe wording unchanged**, to see whether the cloze failures
+reproduce. They do, exactly.
+
+Job 12095, csis.cn1, 96 generated / 0 resumed, canonicaliser v1.1 applied at
+generation time rather than re-scored afterwards:
+
+| | job 11969 re-scored | job 12095 fresh |
+|---|---|---|
+| ANSWER / NEGATED / ABSTAIN / INVALID | 68 / 4 / 18 / 6 | 68 / 4 / 18 / 6 |
+| canonicalisation | 93.75% | 93.75% |
+| mean PSCR | 0.300 | 0.300 |
+| mean D1 coverage | 0.551 | 0.551 |
+| truth accuracy | 0.767 | 0.767 |
+
+`scripts/analysis/compare_runs.py` over the two raw files:
+
+```
+exact raw-text match : 96/96  100.00%
+ANSWER->ANSWER 68 · ABSTAIN->ABSTAIN 18 · INVALID->INVALID 6 · NEGATED->NEGATED 4
+IDENTICAL set of INVALID probes in both runs
+```
+
+**Byte-identical**, a day apart, on different nodes (cn4 → cn1), through an
+environment that was torn down and rebuilt in between. The six INVALIDs are the
+same six probes with the same six texts:
+
+```
+K-C1-GEO-01-P06  'Melbourne'          K-C2-SCI-01-P04  'Au'
+K-C2-GEO-01-P06  'Canberra'           K-C3-GEO-01-P06  'CANBERRA'
+K-C2-SCI-01-P01  'Au'                 K-C4-SCI-01-P04  'Albert Einstein'
+```
+
+**Conclusion: the polar-cloze failures are a property of the probe form, not
+sampling noise.** Deciding what to do about them (§5b) is a methodology call.
+
+Secondary, and useful beyond this question: this is real evidence for §4.6's
+requirement that determinism be VERIFIED rather than assumed. It is not the
+whole preregistered check — `configs/inference/determinism_check.yaml` spans 100
+prompts, two batch compositions and every model — but it is a genuine component
+of it, and the first such evidence the project has.

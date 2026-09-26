@@ -47,18 +47,14 @@ def main(argv: list[str] | None = None) -> int:
 
     instruction = load_config("configs/inference/prompts.yaml").data["instructions"]["trackA.v1"]["text"]
 
-    from .backend import make_backend
+    from .backend import make_backend, serving_kwargs
 
     backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "vllm"))
     if backend_name == "stub":
         backend = make_backend("stub", default="UNKNOWN")
     else:
         backend = make_backend(
-            backend_name,
-            model_id=cfg.data["model_id"], revision=cfg.data["revision"],
-            dtype=cfg.data["dtype"], max_model_len=cfg.data["serving"]["max_model_len"],
-            seed=cfg.data["generation"]["seed"],
-            **({"device": args.device} if backend_name == "transformers" else {}),
+            backend_name, **serving_kwargs(cfg.data, backend_name, args.device)
         )
 
     from .chat_template import audit_tokenizer

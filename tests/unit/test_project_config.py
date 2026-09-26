@@ -276,3 +276,48 @@ def test_the_pinned_inference_stack_matches_adr_0015():
         assert f'{var}="{value}"' in script, (
             f"fix_torch_cuda.sh does not pin {var}={value} as ADR-0015 requires"
         )
+
+
+def test_serving_config_actually_reaches_the_vllm_backend():
+    """Every serving key in the model config must be passed, not defaulted.
+
+    Regression test for a silent config/code disagreement: both entry points
+    built backend arguments by hand and omitted `tensor_parallel_size` and
+    `gpu_memory_utilization`, so VLLMBackend fell back to tp=1 / util=0.90.
+    Harmless for the small models and FATAL for llama33-70b, which declares
+    tp=2 in config: ~141 GB at tp=1 on one 80 GB A100 OOMs, and only after
+    queueing for two GPUs. The config said one thing and the code did another.
+    """
+    import inspect
+
+    from semintegrity.inference.backend import VLLMBackend, serving_kwargs
+    from semintegrity.utils.config import resolve_model_config
+
+    for name in ("qwen25-3b", "llama33-70b"):
+        cfg = resolve_model_config(name).data
+        kwargs = serving_kwargs(cfg, "vllm")
+        assert kwargs["tensor_parallel_size"] == cfg["serving"]["tensor_parallel_size"]
+        assert kwargs["gpu_memory_utilization"] == cfg["serving"]["gpu_memory_utilization"]
+        assert kwargs["max_model_len"] == cfg["serving"]["max_model_len"]
+        assert kwargs["revision"] == cfg["revision"]
+        # and every key must be one VLLMBackend actually accepts
+        accepted = set(inspect.signature(VLLMBackend.__init__).parameters) - {"self"}
+        assert set(kwargs) <= accepted, f"unknown kwargs: {set(kwargs) - accepted}"
+
+    # The 70B is the case that matters: tp=2 must survive the round trip.
+    assert serving_kwargs(resolve_model_config("llama33-70b").data, "vllm")[
+        "tensor_parallel_size"] == 2
+
+
+def test_both_entry_points_build_backend_args_the_same_way():
+    """smoke.py and run_pilot.py must not drift: a smoke test that passes while
+    the pilot it de-risks fails is worse than no smoke test."""
+    from semintegrity.utils.paths import p
+
+    for module in ("src/semintegrity/inference/smoke.py",
+                   "src/semintegrity/inference/run_pilot.py"):
+        text = p(module).read_text(encoding="utf-8")
+        assert "serving_kwargs(" in text, f"{module} does not use the shared helper"
+        assert "max_model_len=cfg.data" not in text, (
+            f"{module} still hand-builds backend arguments"
+        )

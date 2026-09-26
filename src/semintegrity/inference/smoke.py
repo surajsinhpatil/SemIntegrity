@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  dtype      : {cfg.data['dtype']}  quantisation: {cfg.data['quantisation']}")
     print(f"  system role: {cfg.data['supports_system_role']}"
           f"  merge: {cfg.data['system_merge_strategy']}")
-    from .backend import make_backend
+    from .backend import make_backend, serving_kwargs
 
     backend_name = "stub" if args.stub else (args.backend or cfg.data.get("backend", "vllm"))
     print(f"  backend    : {'STUB (fake output)' if args.stub else backend_name}")
@@ -100,13 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         backend = make_backend("stub", default="Paris")
     else:
         backend = make_backend(
-            backend_name,
-            model_id=cfg.data["model_id"],
-            revision=cfg.data["revision"],
-            dtype=cfg.data["dtype"],
-            max_model_len=cfg.data["serving"]["max_model_len"],
-            seed=cfg.data["generation"]["seed"],
-            **({"device": args.device} if backend_name == "transformers" else {}),
+            backend_name, **serving_kwargs(cfg.data, backend_name, args.device)
         )
 
     # Verify the declared system-role support against the real chat template.

@@ -382,6 +382,37 @@ def _apply_stops(text: str, stops: Sequence[str]) -> str:
     return text[:cut]
 
 
+def serving_kwargs(cfg_data: dict[str, Any], backend_name: str, device: str | None = None
+                   ) -> dict[str, Any]:
+    """Backend arguments from a resolved model config.
+
+    Exists because the config and the code had silently disagreed: every model
+    file carries `serving.tensor_parallel_size` and
+    `serving.gpu_memory_utilization`, and neither entry point passed them, so
+    VLLMBackend used its own defaults (tp=1, util=0.90). Harmless for the small
+    models, fatal for llama33-70b -- ~141 GB declared tp=2 in config, would have
+    run at tp=1 on one 80 GB A100 and OOM'd after queueing for two GPUs.
+
+    Building the arguments in ONE place also stops smoke.py and run_pilot.py
+    from drifting apart, which is how a smoke test can pass while the pilot it
+    is meant to de-risk fails.
+    """
+    serving = cfg_data["serving"]
+    kwargs: dict[str, Any] = {
+        "model_id": cfg_data["model_id"],
+        "revision": cfg_data["revision"],
+        "dtype": cfg_data["dtype"],
+        "max_model_len": serving["max_model_len"],
+        "seed": cfg_data["generation"]["seed"],
+    }
+    if backend_name == "vllm":
+        kwargs["tensor_parallel_size"] = serving["tensor_parallel_size"]
+        kwargs["gpu_memory_utilization"] = serving["gpu_memory_utilization"]
+    elif backend_name == "transformers" and device is not None:
+        kwargs["device"] = device
+    return kwargs
+
+
 def make_backend(name: str, **kwargs: Any) -> Backend:
     """Construct the configured backend. One stack for every model (§4.13)."""
     backends = {"transformers": TransformersBackend, "vllm": VLLMBackend, "stub": StubBackend}

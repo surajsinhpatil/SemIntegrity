@@ -23,17 +23,37 @@ fi
 export HF_HOME="${SEMINT_ROOT}/hf_cache"
 export HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}"     # compute nodes run OFFLINE by default
 export TRANSFORMERS_OFFLINE="${HF_HUB_OFFLINE}"
-# vLLM, torch.compile/inductor and triton all default to $HOME/.cache, which on
-# this SHARED lab account is outside work_dir and breaks the first rule in
-# configs/cluster/cluster.yaml:shared_account_rules. Observed 2026-09-25: job
-# 11968 wrote a torch_compile_cache to /nfs_home/users/yashsinha/.cache/vllm.
-# These caches are also part of the reproducible environment, so they belong
-# beside everything else we sync and archive.
+# Caches split in TWO, and the split matters.
+#
+# DURABLE artefacts stay in work_dir. These tools default to $HOME/.cache, which
+# on this SHARED lab account is outside work_dir and breaks the first rule in
+# configs/cluster/cluster.yaml:shared_account_rules (job 11968 wrote one there).
 export XDG_CACHE_HOME="${SEMINT_ROOT}/.cache"
-export VLLM_CACHE_ROOT="${SEMINT_ROOT}/.cache/vllm"
-export TORCHINDUCTOR_CACHE_DIR="${SEMINT_ROOT}/.cache/torchinductor"
-export TRITON_CACHE_DIR="${SEMINT_ROOT}/.cache/triton"
-mkdir -p "$XDG_CACHE_HOME" "$VLLM_CACHE_ROOT" "$TORCHINDUCTOR_CACHE_DIR" "$TRITON_CACHE_DIR"
+mkdir -p "$XDG_CACHE_HOME"
+
+# JIT CACHES GO NODE-LOCAL. NEVER ON NFS.
+#
+# Triton and Inductor cache *compiled shared objects* -- e.g.
+# triton/<hash>/cuda_utils.cpython-311-x86_64-linux-gnu.so -- which are dlopen'd
+# during CUDA initialisation. On NFS that is unsafe: no reliable locking, and
+# mmap semantics that differ from local disk.
+#
+# This is not theoretical. Pointing these at ${SEMINT_ROOT}/.cache cost five
+# failed jobs on 2026-09-26 (12081, 12089, 12090, 12092, 12093). The pattern was
+# exact: the runs that CREATED the cache succeeded, and every run that READ it
+# died with SIGSEGV in EngineCore before parallel_state init, on four different
+# nodes, with no Python-level error. Moving the caches aside fixed it on the
+# first attempt.
+#
+# The cost of node-local is one torch.compile per job, ~16 s out of ~74 s. The
+# compile cache is a derived build artefact, not a reproducibility artefact --
+# the things that must be archived are the weights (HF_HOME), the lock file and
+# the outputs, all of which stay on NFS.
+SEMINT_JIT_ROOT="${SLURM_TMPDIR:-/tmp}/semint-jit-${SLURM_JOB_ID:-$$}"
+export VLLM_CACHE_ROOT="${SEMINT_JIT_ROOT}/vllm"
+export TORCHINDUCTOR_CACHE_DIR="${SEMINT_JIT_ROOT}/torchinductor"
+export TRITON_CACHE_DIR="${SEMINT_JIT_ROOT}/triton"
+mkdir -p "$VLLM_CACHE_ROOT" "$TORCHINDUCTOR_CACHE_DIR" "$TRITON_CACHE_DIR"
 export TOKENIZERS_PARALLELISM=false
 # Cap every BLAS backend, not just OpenMP. Compute nodes have 128 cores, and
 # numpy/scipy otherwise spawn one thread per core at import — slow at best,
@@ -115,6 +135,11 @@ job_provenance() {
 
 on_exit() {
   local code=$?
+  # Node-local JIT scratch is per-job and worthless afterwards; leaving it
+  # behind fills /tmp on a shared node.
+  if [[ -n "${SEMINT_JIT_ROOT:-}" && "${SEMINT_JIT_ROOT}" == */semint-jit-* ]]; then
+    rm -rf "${SEMINT_JIT_ROOT}" 2>/dev/null || true
+  fi
   echo "=== job exit: ${code} at $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
   exit "$code"
 }

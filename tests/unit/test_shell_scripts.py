@@ -95,25 +95,56 @@ def test_no_head_on_a_pipe_under_pipefail(script):
     )
 
 
-def test_job_preamble_keeps_every_cache_inside_the_work_dir():
-    """Shared lab account: nothing may be written outside work_dir.
+def test_durable_caches_stay_in_the_work_dir():
+    """Shared lab account: durable artefacts may not be written outside work_dir.
 
-    configs/cluster/cluster.yaml:shared_account_rules is explicit about this, and
-    the tools default the other way. Job 11968 (2026-09-25) wrote a vLLM
-    torch_compile_cache to /nfs_home/users/yashsinha/.cache/vllm before these
-    were pinned. These caches are also part of the reproducible environment, so
-    they belong beside everything else that gets synced.
+    configs/cluster/cluster.yaml:shared_account_rules is explicit, and the tools
+    default the other way -- job 11968 wrote a cache to $HOME before these were
+    pinned.
     """
     common = p("slurm/templates/_common.sh").read_text(encoding="utf-8")
-    for var in (
-        "HF_HOME",
-        "XDG_CACHE_HOME",
-        "VLLM_CACHE_ROOT",
-        "TORCHINDUCTOR_CACHE_DIR",
-        "TRITON_CACHE_DIR",
-    ):
+    for var in ("HF_HOME", "XDG_CACHE_HOME"):
         assert f"export {var}=" in common, f"_common.sh does not pin {var}"
         line = next(ln for ln in common.splitlines() if ln.startswith(f"export {var}="))
         assert "${SEMINT_ROOT}" in line, (
             f"{var} is not rooted at SEMINT_ROOT, so it can escape work_dir: {line}"
         )
+
+
+def test_jit_caches_are_node_local_and_never_on_nfs():
+    """JIT caches must NOT live on NFS, and this one is written in blood.
+
+    Triton and Inductor cache compiled shared objects -- e.g.
+    triton/<hash>/cuda_utils.cpython-311-x86_64-linux-gnu.so -- which are
+    dlopen'd during CUDA initialisation. NFS gives no reliable locking and
+    different mmap semantics, and the result is not a clean error.
+
+    Pointing these at ${SEMINT_ROOT}/.cache cost FIVE failed GPU jobs on
+    2026-09-26 (12081, 12089, 12090, 12092, 12093). The signature was exact: the
+    runs that CREATED the cache succeeded and every run that READ it died with
+    SIGSEGV inside EngineCore before parallel_state init, on four different
+    nodes, with no Python-level traceback. Moving the caches aside fixed it on
+    the first attempt.
+
+    An earlier version of this very test asserted the OPPOSITE -- that all five
+    variables be rooted at SEMINT_ROOT -- and so locked the bug in place. That is
+    why this one names the mechanism rather than just the paths.
+    """
+    common = p("slurm/templates/_common.sh").read_text(encoding="utf-8")
+    for var in ("VLLM_CACHE_ROOT", "TORCHINDUCTOR_CACHE_DIR", "TRITON_CACHE_DIR"):
+        assert f"export {var}=" in common, f"_common.sh does not pin {var}"
+        line = next(ln for ln in common.splitlines() if ln.startswith(f"export {var}="))
+        assert "SEMINT_JIT_ROOT" in line, (
+            f"{var} must live under SEMINT_JIT_ROOT (node-local), got: {line}"
+        )
+        assert "${SEMINT_ROOT}" not in line, (
+            f"{var} is on NFS. This caused five SIGSEGV job failures: {line}"
+        )
+    jit = next(ln for ln in common.splitlines() if ln.startswith("SEMINT_JIT_ROOT="))
+    assert "SLURM_TMPDIR" in jit and "/tmp" in jit, (
+        f"SEMINT_JIT_ROOT must resolve to node-local scratch, got: {jit}"
+    )
+    assert "${SEMINT_ROOT}" not in jit, f"SEMINT_JIT_ROOT is on NFS: {jit}"
+    assert "rm -rf" in common and "semint-jit-" in common, (
+        "per-job JIT scratch is never cleaned up; /tmp will fill on shared nodes"
+    )

@@ -202,8 +202,24 @@ software:
       stack, held constant across all models.
 
   cache_containment:
-    status: VERIFIED
-    date: 2026-09-25
+    status: VERIFIED, then CORRECTED
+    date: 2026-09-26
+    correction: >-
+      The 2026-09-25 version of this pinned VLLM_CACHE_ROOT,
+      TORCHINDUCTOR_CACHE_DIR and TRITON_CACHE_DIR under work_dir, i.e. on NFS.
+      That satisfied the shared-account rule and broke every subsequent GPU job.
+      Triton and Inductor cache COMPILED SHARED OBJECTS which are dlopen'd during
+      CUDA init; NFS gives no reliable locking and different mmap semantics.
+      Five jobs failed (12081, 12089, 12090, 12092, 12093) with SIGSEGV inside
+      EngineCore before parallel_state, on four different nodes, with no
+      Python-level traceback. The runs that CREATED the cache succeeded; every
+      run that READ it died. Moving the caches aside fixed it immediately
+      (job 12094, COMPLETED, 8/8 generations).
+      Now: HF_HOME and XDG_CACHE_HOME stay in work_dir; the three JIT caches go
+      to ${SLURM_TMPDIR:-/tmp}/semint-jit-${SLURM_JOB_ID} and are deleted on job
+      exit. Cost is one torch.compile per job, ~16 s. A compile cache is a
+      derived build artefact, not a reproducibility artefact.
+    original_date: 2026-09-25
     rule: "shared account -- nothing may be written outside work_dir"
     pinned_in: slurm/templates/_common.sh
     variables: [HF_HOME, XDG_CACHE_HOME, VLLM_CACHE_ROOT, TORCHINDUCTOR_CACHE_DIR, TRITON_CACHE_DIR]

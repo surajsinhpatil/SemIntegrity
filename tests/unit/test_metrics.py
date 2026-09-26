@@ -129,7 +129,9 @@ def test_undefined_constraints_leave_both_numerator_and_denominator():
 @pytest.mark.parametrize("label", [ResponseLabel.ABSTAIN, ResponseLabel.INVALID])
 def test_non_answers_never_become_contradictions(label):
     """They leave the numerator AND the denominator."""
-    responses = [_resp(1, "A"), _resp(2, "A"), _resp(3, None, label)]
+    # The responses are built for clarity about what the verdicts represent;
+    # the metric reads the verdicts.
+    _ = [_resp(1, "A"), _resp(2, "A"), _resp(3, None, label)]
     results = [
         FakePair("K-C1-GEO-01-P01", "K-C1-GEO-01-P02", Verdict.SATISFIED),
         FakePair("K-C1-GEO-01-P01", "K-C1-GEO-01-P03", Verdict.NOT_APPLICABLE),

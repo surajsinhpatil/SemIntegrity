@@ -94,7 +94,7 @@ def test_temperature_changes_jsd_which_is_why_it_is_preregistered():
         builder = SoftmaxOverMeanLogprob(temperature=t)
         jsds.append(jensen_shannon_divergence(
             builder.to_distribution(lp_a), builder.to_distribution(lp_b)))
-    assert len(set(round(v, 6) for v in jsds)) == 3, "T must materially change JSD"
+    assert len({round(v, 6) for v in jsds}) == 3, "T must materially change JSD"
     assert jsds[0] > jsds[-1], "lower temperature sharpens, raising divergence"
 
 

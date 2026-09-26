@@ -15,7 +15,6 @@ from semintegrity.analysis.bootstrap import (
     cluster_bootstrap,
 )
 
-
 # --- basic behaviour ---------------------------------------------------------
 
 def test_recovers_a_known_mean():
@@ -182,7 +181,7 @@ def test_adjusted_p_values_are_monotone_and_bounded():
     ranked = [q[i] for i in sorted(range(len(p)), key=lambda i: p[i])]
     assert ranked == sorted(ranked), "adjusted p must not decrease with raw p"
     assert all(0.0 <= x <= 1.0 for x in q)
-    assert all(qi >= pi for qi, pi in zip(q, p)), "adjustment cannot lower a p-value"
+    assert all(qi >= pi for qi, pi in zip(q, p, strict=False)), "adjustment cannot lower a p-value"
 
 
 def test_adjusted_p_agrees_with_the_rejection_flags():

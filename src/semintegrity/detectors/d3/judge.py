@@ -124,7 +124,7 @@ def parse_judgement(text: str) -> tuple[dict, str | None]:
     confidence = obj.get("confidence")
     if confidence is None:
         return obj, "missing 'confidence'"
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+    if isinstance(confidence, bool) or not isinstance(confidence, int | float):
         return obj, f"confidence {confidence!r} is not a number"
     if not 0.0 <= float(confidence) <= 1.0:
         return obj, f"confidence {confidence} is outside [0, 1]"

@@ -24,6 +24,18 @@ job_provenance
 MODEL="${MODEL:-qwen25-3b}"
 PILOT_DIR="data/benchmark/pilot"
 
+# The default output path is STABLE on purpose: the runner resumes on
+# (experiment_id, model_id, probe_id, sample_index), so a job killed by walltime
+# picks up where it stopped instead of regenerating. The cost is that a
+# DELIBERATE re-run against a complete file silently generates nothing -- job
+# 12081 (2026-09-26) was submitted as a fresh pilot and would have reported
+# "0 generated, 96 already present" had vLLM started at all.
+#
+# So a fresh run states so explicitly:
+#   OUT=results/raw/pilot/qwen25-3b-rerun2.jsonl sbatch ... slurm/20_pilot_one_model.sbatch
+# Resume is preserved for the default path; a new path is a new dataset.
+OUT="${OUT:-results/raw/pilot/${MODEL}.jsonl}"
+
 if [[ ! -f "${PILOT_DIR}/constraints.jsonl" ]]; then
   echo "ABORT: ${PILOT_DIR}/constraints.jsonl does not exist." >&2
   echo "The pilot constraints must be authored and approved before this runs." >&2
@@ -35,7 +47,12 @@ python3 -m semintegrity.benchmark.validate --split pilot || exit 3
 
 echo
 echo "--- inference: ${MODEL} ---"
-OUT="results/raw/pilot/${MODEL}.jsonl"
+echo "output: ${OUT}"
+if [[ -s "${OUT}" ]]; then
+  echo "NOTE: ${OUT} already has $(wc -l < "${OUT}") record(s); the runner will"
+  echo "      RESUME and skip probes already present. Set OUT=<new path> for a"
+  echo "      genuinely fresh run."
+fi
 python3 -m semintegrity.inference.run_pilot \
   --model "${MODEL}" \
   --split pilot \
@@ -43,9 +60,11 @@ python3 -m semintegrity.inference.run_pilot \
 
 echo
 echo "--- Stage 0 + D1 ---"
+REPORT="${REPORT:-results/analysis/pilot_$(basename "${OUT}" .jsonl).json}"
+echo "report: ${REPORT}"
 python3 -m semintegrity.analysis.pilot_report \
   --raw "${OUT}" \
   --split pilot \
-  --out "results/analysis/pilot_${MODEL}.json"
+  --out "${REPORT}"
 
 echo "pilot complete"

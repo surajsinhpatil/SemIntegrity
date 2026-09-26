@@ -152,3 +152,86 @@ def test_negated_label_is_reachable_and_evaluable(pilot):
     assert res.label is ResponseLabel.NEGATED
     assert res.canonical_answer == c.gold_answer
     assert res.is_evaluable
+
+
+# --- the same invariant, through D0 ------------------------------------------
+
+def test_d0_also_scores_a_perfect_model_at_zero_violations(pilot):
+    """D0 is a second, independent path to the same claim.
+
+    D1 compares canonical strings; D0 evaluates a symbolic predicate against the
+    frozen knowledge base. They can disagree -- that disagreement is a reportable
+    result (§4.8.2) -- but neither may flag a perfectly self-consistent model.
+
+    This also exercises the frozen KB offline, which is how every compute node
+    runs it (ADR-0011).
+    """
+    from itertools import combinations
+
+    from semintegrity.detectors.d0.registry import default_registry
+    from semintegrity.kb.adapter import WikidataKB
+    from semintegrity.kb.cache import CacheMode, KBCache
+    from semintegrity.utils.paths import data_path
+
+    constraints, by_constraint = pilot
+    registry = default_registry()
+    kb = WikidataKB(KBCache(data_path("wikidata_cache"), mode=CacheMode.FROZEN))
+
+    uncovered, violations = [], []
+    for cid, probe_list in sorted(by_constraint.items()):
+        c = constraints[cid]
+        assert registry.has(c.formal_predicate), f"{cid}: no predicate {c.formal_predicate}"
+        pred = registry.get(c.formal_predicate)
+        canon = [
+            canonicalise(_raw_for(probe, probe.expected_answer), c, probe)
+            for probe in probe_list
+        ]
+        usable = [x for x in canon if x.label is ResponseLabel.ANSWER]
+        for a, b in combinations(usable, 2):
+            r = pred.check_pair(c, a, b, kb)
+            if not r.is_covered:
+                uncovered.append(f"{cid}: {a.probe_id}/{b.probe_id} {r.reason}")
+            if r.verdict is Verdict.VIOLATION:
+                violations.append(f"{cid}: {a.probe_id}/{b.probe_id} {r.reason}")
+
+    assert not violations, (
+        "D0 flags a PERFECTLY CONSISTENT model as contradictory:\n"
+        + "\n".join(violations[:5])
+    )
+    # Coverage is a reportable result, not a pass/fail gate -- but for a model
+    # that answers every probe, a sudden collapse to zero would mean D0 stopped
+    # running rather than that coverage legitimately shrank.
+    assert not uncovered, (
+        f"D0 reached no decision on {len(uncovered)} pairs of a fully answering "
+        f"model; it may not be running at all:\n" + "\n".join(uncovered[:5])
+    )
+
+
+def test_d0_and_d1_agree_that_a_perfect_model_is_consistent(pilot):
+    """Both detectors, same conclusion. If they ever diverge HERE it is a bug,
+    not the interesting detector-disagreement result §4.8 anticipates."""
+    from itertools import combinations
+
+    from semintegrity.detectors.d0.registry import default_registry
+    from semintegrity.kb.adapter import WikidataKB
+    from semintegrity.kb.cache import CacheMode, KBCache
+    from semintegrity.utils.paths import data_path
+
+    constraints, by_constraint = pilot
+    registry = default_registry()
+    kb = WikidataKB(KBCache(data_path("wikidata_cache"), mode=CacheMode.FROZEN))
+
+    for cid, probe_list in sorted(by_constraint.items()):
+        c = constraints[cid]
+        canon = [
+            canonicalise(_raw_for(probe, probe.expected_answer), c, probe)
+            for probe in probe_list
+        ]
+        d1_bad = sum(r.verdict is Verdict.VIOLATION for r in check_all_pairs(canon))
+        pred = registry.get(c.formal_predicate)
+        usable = [x for x in canon if x.label is ResponseLabel.ANSWER]
+        d0_bad = sum(
+            pred.check_pair(c, a, b, kb).verdict is Verdict.VIOLATION
+            for a, b in combinations(usable, 2)
+        )
+        assert d1_bad == d0_bad == 0, f"{cid}: D1 {d1_bad}, D0 {d0_bad}, expected 0 and 0"

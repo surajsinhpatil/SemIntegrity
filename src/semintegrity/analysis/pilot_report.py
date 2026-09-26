@@ -11,12 +11,16 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter, defaultdict
+from itertools import combinations
 from pathlib import Path
 
 from ..benchmark.loader import load_split
 from ..canonicalization.canonicaliser import CANONICALISER_VERSION, canonicalise
+from ..detectors.d0.registry import default_registry
 from ..detectors.d1.exact_match import check_all_pairs, coverage
 from ..inference.backend import assert_no_stub_responses
+from ..kb.adapter import WikidataKB
+from ..kb.cache import CacheMode, KBCache
 from ..schemas.enums import ResponseLabel, Verdict
 from ..schemas.response import RawResponse
 from ..utils.io import read_jsonl
@@ -34,6 +38,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.allow_stub:
         assert_no_stub_responses(args.raw, context="the pilot report")
+
+    # --- D0: symbolic predicate evaluation against the FROZEN KB snapshot ----
+    # Built up front so an unavailable KB is reported as a STATUS rather than
+    # silently producing zero coverage. "D0 covered nothing" and "D0 never ran"
+    # are different claims and must not look alike in the output.
+    d0_registry = default_registry()
+    d0_kb = None
+    d0_status = "ok"
+    try:
+        cache = KBCache(data_path("wikidata_cache"), mode=CacheMode.FROZEN)
+        d0_kb = WikidataKB(cache)
+    except Exception as exc:  # pragma: no cover - depends on snapshot state
+        d0_status = f"kb_unavailable: {type(exc).__name__}: {exc}"
 
     cons_list, probe_list = load_split(data_path("benchmark") / args.split)
     constraints = {c.constraint_id: c for c in cons_list}
@@ -60,6 +77,27 @@ def main(argv: list[str] | None = None) -> int:
         results = check_all_pairs(canon)
         evaluable = [r for r in results if r.verdict is not Verdict.NOT_APPLICABLE]
         contradictions = sum(r.is_contradiction for r in results)
+
+        # --- D0 -------------------------------------------------------------
+        # BOTH readings are computed and stored. Q22 (whether "D0" is the
+        # pairwise or the set-level verdict) is awaiting the researcher, and
+        # picking one here would decide it by implementation.
+        d0_pair_total = d0_pair_covered = d0_pair_violations = 0
+        d0_set_verdict = None
+        d0_note = d0_status
+        if d0_kb is not None and d0_registry.has(c.formal_predicate):
+            pred = d0_registry.get(c.formal_predicate)
+            usable = [x for x in canon if x.label is ResponseLabel.ANSWER]
+            for x, y in combinations(usable, 2):
+                r = pred.check_pair(c, x, y, d0_kb)
+                d0_pair_total += 1
+                d0_pair_covered += r.is_covered
+                d0_pair_violations += r.verdict is Verdict.VIOLATION
+            set_result = pred.check_set(c, canon, d0_kb)
+            d0_set_verdict = set_result.verdict.value
+            d0_note = set_result.reason or "ok"
+        elif d0_kb is not None:
+            d0_note = f"no predicate registered for {c.formal_predicate!r}"
         # A NEGATED response asserted "not g". It IS an answer — the model
         # committed to something — but it is factually wrong whenever g is the
         # gold answer, so it counts in the denominator of truth accuracy and
@@ -89,6 +127,18 @@ def main(argv: list[str] | None = None) -> int:
             "truth_accuracy": (correct / len(answered)) if answered else None,
             "abstention_rate": sum(x.label is ResponseLabel.ABSTAIN for x in canon) / len(canon),
             "d1_coverage": coverage(results),
+            # D0 coverage is a RESULT in its own right (§4.8.1,
+            # configs/detectors/d0_symbolic.yaml), never a diagnostic to hide.
+            # It is computed over ALL pairs of the constraint, so responses D0
+            # cannot use -- including NEGATED, which supplies no definite value
+            # to a symbolic predicate -- register as reduced coverage.
+            "d0_pairs_considered": d0_pair_total,
+            "d0_pairs_covered": d0_pair_covered,
+            "d0_coverage": (d0_pair_covered / len(results)) if results else None,
+            "d0_pair_violations": d0_pair_violations,
+            "d0_pscr": (d0_pair_violations / d0_pair_covered) if d0_pair_covered else None,
+            "d0_set_verdict": d0_set_verdict,
+            "d0_note": d0_note,
         })
 
     # The CANON go/no-go criterion (configs/inference/pilot.yaml) is a
@@ -109,6 +159,9 @@ def main(argv: list[str] | None = None) -> int:
         "canon_gate_threshold": 0.95,
         "canon_gate_passed": canon_rate >= 0.95,
         "canonicaliser_version": CANONICALISER_VERSION,
+        "d0_status": d0_status,
+        "d0_predicates_registered": sorted(d0_registry.names()),
+        "mean_d0_coverage": _mean(rows, "d0_coverage"),
         "constraints_with_undefined_pscr": len(rows) - len(defined),
         "mean_pscr_over_defined": (sum(r["pscr"] for r in defined) / len(defined)) if defined else None,
         "mean_truth_accuracy": _mean(rows, "truth_accuracy"),
@@ -133,6 +186,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"mean truth accuracy: {_fmt(report['mean_truth_accuracy'])}")
     print(f"mean abstention    : {_fmt(report['mean_abstention_rate'])}")
     print(f"mean D1 coverage   : {_fmt(report['mean_d1_coverage'])}")
+    print(f"mean D0 coverage   : {_fmt(report['mean_d0_coverage'])}   ({report['d0_status']})")
+    d0_defined = [r for r in rows if r["d0_pscr"] is not None]
+    if d0_defined:
+        print(f"mean PSCR (D0)     : "
+              f"{sum(r['d0_pscr'] for r in d0_defined) / len(d0_defined):.3f}"
+              f"   over {len(d0_defined)}/{len(rows)} constraints")
+    set_verdicts = Counter(r["d0_set_verdict"] for r in rows if r["d0_set_verdict"])
+    if set_verdicts:
+        print(f"D0 set-level       : {dict(set_verdicts)}   (Q22: both readings stored)")
 
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

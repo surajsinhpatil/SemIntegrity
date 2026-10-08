@@ -1,8 +1,14 @@
 # PROJECT_STATUS
 
 **Project:** SemIntegrity — Measuring Semantic Self-Inconsistency in LLMs Across Structured Integrity Constraints
-**Last updated:** 2026-09-11 (session 4)
-**Current phase:** Phase 0 complete · Phase 1 infrastructure complete · **Phase −1 awaiting the cluster probe** · one-model pilot stack ready
+**Last updated:** 2026-10-06 (design-resolution session)
+**Current phase:** Phases −1/0/1/2 complete · Phase 3 pilot run twice · **Phase 5 design DECIDED, authoring NOT STARTED**
+
+> **Note on this file.** The phase board and the dated sections below were
+> refreshed on 2026-10-06 only where the design-resolution batch touched them
+> (phases −1, 2, 3, 5 and the Phase-5 design decisions). Older sections still
+> carry their original 2026-09-11 wording; `HANDOFF.md` and
+> `docs/RESULTS_STATUS.md` are the current state of record.
 
 > This file is the live state of the project. It is updated at the end of every
 > working session. Nothing is marked complete that has not actually been done
@@ -10,17 +16,44 @@
 
 ---
 
+## Phase-5 design decisions (2026-10-06)
+
+Approved by the researcher as decisions A1–A9; evidence in
+`docs/DESIGN_RESOLUTION_2026-10-06.md`.
+
+| decision | outcome |
+|---|---|
+| A1 ADR-0002 lattice | APPROVED — 30 families × 4 classes, 6 schemas × 5 instances |
+| A2 ADR-0003 probe factors | APPROVED — resolves Q2 |
+| A3/A4 answer-type allocation | APPROVED — ADR-0017: axis-fixed, two `date` axes, cardinality covariate; resolves Q23 |
+| A5 D0 predicate scope | ACCEPTED — 24 per-schema registrations, no new detection logic |
+| A6 polar-cloze rewrite | APPROVED — Variant A, applied; resolves Q24 |
+| A7 accounting | CONFIRMED — 144 at freeze, 132 new, 1,056 new probes |
+| A8 MPS inference | DECLINED for now |
+| A9 CANON figure | 6/96 = 93.75% was canonical pre-rewrite; 94.79% is simulation only |
+
+**CANON FROZEN 2026-10-07:** pilot run3 on the rewritten probes returned
+**0/96 INVALID = 100.00%** against the unchanged >=95% gate. All six previous
+INVALIDs resolved, no new ones. Canonicaliser, threshold and cloze wording are
+frozen. Researcher-reported from the cluster; see `docs/RESULTS_STATUS.md` for
+provenance and for what the figure does not establish.
+
+**Still undecided:** entity/date fall-through on polar probes; Q5 / ADR-0016
+(D4 `distribution_construction`); Q22 (D0 pairwise vs set-level reporting).
+
+---
+
 ## Phase board
 
 | Phase | Name | Status | Gate |
 |---|---|---|---|
-| −1 | Infrastructure reconnaissance | **NOT STARTED** — needs cluster access | env test + smoke job pass |
+| −1 | Infrastructure reconnaissance | **COMPLETE** — cluster, vLLM 0.11.2, A100, bf16, offline resolution all verified (ADR-0015) | env test + smoke job pass |
 | 0 | Literature verification | **COMPLETE** — 12/12 resolved | every citation VERIFIED |
 | 1 | Constraint representation + 12 pilot constraints | **COMPLETE (DRAFT)** — 12 constraints, 96 probes built | predicates execute; ground truth resolves |
-| 2 | Pipeline implementation | **PARTIAL** — Stage 0, D1, inference done; D2/D3/D4 pending | pipeline runs end to end |
-| 3 | Pilot — reduced to **1 model** on advice | **READY TO RUN** — blocked on cluster probe + constraint approval | go/no-go criteria |
+| 2 | Pipeline implementation | **COMPLETE** — Stage 0, D0–D4, metrics, bootstrap, BH-FDR, aggregation all implemented and tested; D4 blocked on Q5 at *run* time | pipeline runs end to end |
+| 3 | Pilot — reduced to **1 model** on advice | **RUN THREE TIMES** · **CANON PASSES at 100.00% (0/96), FROZEN 2026-10-07** · PROBE/D0AUDIT/NONDEGEN/IAA/ABSTAIN criteria still outstanding | go/no-go criteria |
 | 4 | Preregistration preparation | **NOT STARTED** | **researcher submits to OSF** |
-| 5 | Full benchmark (120 constraints) | **NOT STARTED** | benchmark frozen |
+| 5 | Full benchmark (120 constraints) | **PLAN VALIDATED 2026-10-07** (`docs/AUTHORING_PLAN.md`, 8/8 checks) · **DESIGN DECIDED 2026-10-06** (ADR-0002, ADR-0003, ADR-0017; allocation in `docs/BENCHMARK_COVERAGE_MATRIX.md` rev 3) · **AUTHORING NOT STARTED**: 132 constraints, 1,056 primary probes | benchmark frozen |
 | 6 | Full inference | **NOT STARTED** | provenance verified |
 | 7 | Detection + annotation | **NOT STARTED** | per-class detector P/R/F1 |
 | 8 | Statistics + figures | **NOT STARTED** | — |

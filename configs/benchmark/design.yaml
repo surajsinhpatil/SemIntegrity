@@ -26,6 +26,61 @@ lattice:
     count: 5
     constraints_per_domain_per_class: 6
     statistical_role: "(1 | domain) — balancing/control variable ONLY; no inferential claim"
+    order: [geography, history, biology, public_office, science_technology]  # §4.3's own order
+
+  # DECIDED 2026-10-06, AMENDED 2026-10-07 (researcher) — ADR-0017 + Option B.
+  #
+  # §4.3 asks families to hold "comparable answer type" approximately constant
+  # ACROSS classes, so answer type is NOT a function of the class alone. The
+  # original rule made it a function of the schema AXIS alone; that collided with
+  # the approved probe generator, which routes a direct+affirmative probe of an
+  # entity/date-answered constraint through `_realise_open` and so requires a
+  # single binary subject-relation-object. A conjunction (C2) and a universal (C3)
+  # have no such structure. ADR-0017 is therefore amended: answer type is a
+  # function of (axis, class).
+  answer_type:
+    status: DECIDED
+    fixed_by: axis_and_class          # amended 2026-10-07; was schema_axis
+    rule:
+      C1: per_axis                    # retains the approved axis-fixed allocation
+      C2: boolean                     # all axes — no single binary relation exists
+      C3: boolean                     # all axes — no single binary relation exists
+      C4: per_axis                    # retains the approved axis-fixed allocation
+    per_axis:
+      1: entity      # unique designated role-bearer
+      2: boolean     # disjoint category membership
+      3: entity      # part-whole containment
+      4: date        # event precedence
+      5: boolean     # extremal uniqueness
+      6: date        # interval boundary
+    date_axes: [4, 6]                 # read by the corroboration rule; see below
+    # Descriptive distribution, not an experimental factor. The confirmatory
+    # contrast C1+C2 vs C3+C4 stays exactly balanced (0.556 vs 0.556); the
+    # four-class descriptive profile carries a 0.111 spread. Answer type enters
+    # the secondary model as a covariate, never as a factor.
+    chance_pscr_per_class: {C1: 0.611, C2: 0.500, C3: 0.500, C4: 0.611}
+    confirmatory_balance: "C1+C2 = C3+C4 = 0.556; gap 0.000"
+    descriptive_spread: 0.111
+    covariate: answer_space_cardinality  # configs/analysis/statistics.yaml
+    accepted_cost: >-
+      The four-class descriptive profile is no longer artefact-free: it carries a
+      0.111 chance-PSCR spread, against 0.000 under the original axis-only rule
+      and 0.167 under a fully class-tied one. The confirmatory contrast, which
+      §4.11 says carries the claim, remains exactly balanced. D0's temporal-anchor
+      predicate reaches only C1/C4 on the two date axes.
+
+  # DECIDED 2026-10-06 (engineering) — ADR-0003 consequences.
+  # ADR-0003 rotates syntax by each constraint's 0-based position WITHIN ITS CLASS
+  # and requires that position to be stable once frozen. It is derived from the
+  # records by semintegrity.benchmark.ordering, never from source-file order.
+  constraint_ordering:
+    status: DECIDED
+    implementation: semintegrity.benchmark.ordering.constraint_indices
+    keys: [domain (in the order above), schema index, constraint cell index]
+    why: >-
+      Source-file order used to determine constraint_index, so re-ordering two
+      families in candidates.yaml would silently re-word a third of all probes.
+    verified_by: tests/unit/test_constraint_ordering.py
 
 validation_rules:              # enforced by src/semintegrity/benchmark/design_validator.py
   - id: total_count
@@ -58,6 +113,12 @@ entity_familiarity:
 ground_truth:
   primary_source: wikidata
   wikidata_is_absolute_truth: false
+  # PREFERRED anchor, NOT a precondition on class C4 — see ADR-0020
+  # (APPROVED 2026-10-08). No code reads this field. Where a fact's temporal
+  # structure is carried by a direct date property (P571 inception, P576
+  # dissolved) instead of a statement's validity qualifiers, that property is
+  # the correct anchor and is read by claim_time / claim_literal. The FROZEN
+  # pilot's C4 cells and 5 authored test C4 cells already do exactly that.
   temporal_qualifiers_required: [P580, P582]   # start time, end time
   corroboration_required_for: [history, temporal_facts]
   second_source_required: true
@@ -94,3 +155,19 @@ splits:
     per_class: 30
     uses: [all_confirmatory_and_descriptive_analysis]
     rule: "nothing is tuned on this set; every tuned artefact is hashed and frozen before it is touched"
+
+  # CONFIRMED 2026-10-06 (researcher) — decision A7. See docs/BENCHMARK_ACCOUNTING.md.
+  # The 120 is unchanged from §4.3 and Appendix A.1 ("120 total"). What ADR-0007
+  # settles is the AUTHORING bill: none of the existing 12 can be one of the 120.
+  accounting:
+    status: CONFIRMED
+    existing_pilot_constraints: 12          # -> dev; already tuning data, so §5.6 bars them from test
+    new_test_constraints: 120
+    new_dev_constraints: 12                 # to reach ADR-0007's 24
+    constraints_at_freeze: 144              # 120 test + 24 dev
+    newly_authored_constraints: 132
+    existing_pilot_probes: 96               # stay pilot/dev material; 28 rewritten under RW-001
+    new_primary_probes: 1056                # 960 test + 96 new dev
+    primary_probes_at_freeze: 1152          # 960 + 192
+    test_cell_index_range: [11, 16]         # 01..10 reserved for pilot/dev; the id grammar has no split field
+    cross_split_check: semintegrity.benchmark.design_validator.BenchmarkDesignValidator.validate_global_id_uniqueness

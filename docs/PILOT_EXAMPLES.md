@@ -42,7 +42,7 @@ These three are chosen to span three classes, three domains and all three answer
 | `P03` | yes | cloze | affirmative | colloquial | direct | **Canberra** | The capital of Australia is ___. |
 | `P04` | yes | declarative | affirmative | colloquial | reverse | **YES** | Canberra is the capital of Australia — YES or NO? |
 | `P05` | yes | interrogative | negated | formal | direct | **NO** | Is it false that the capital city of Australia is Canberra? |
-| `P06` | — | cloze | negated | formal | reverse | **NO** | It is not the case that Canberra is the capital city of Australia: ___ |
+| `P06` | — | cloze | negated | formal | reverse | **NO** | The statement "It is not the case that Canberra is the capital city of Australia" is ___. |
 | `P07` | — | declarative | negated | colloquial | direct | **NO** | It is not the case that the capital of Australia is Canberra — YES or NO? |
 | `P08` | — | interrogative | negated | colloquial | reverse | **NO** | Is it false that Canberra is the capital of Australia? |
 
@@ -84,13 +84,13 @@ Every `(polarity × register × direction)` cell appears exactly once — 4 affi
 
 | Probe | In 5-probe run | Syntax | Polarity | Register | Direction | Expects | Question |
 |---|---|---|---|---|---|---|---|
-| `P01` | yes | cloze | affirmative | formal | direct | **NO** | Gold has more than one atomic number: ___ |
+| `P01` | yes | cloze | affirmative | formal | direct | **NO** | The statement "Gold has more than one atomic number" is ___. |
 | `P02` | yes | declarative | affirmative | formal | reverse | **NO** | More than one atomic number belongs to gold — YES or NO? |
 | `P03` | yes | interrogative | affirmative | colloquial | direct | **NO** | Is the following statement true? Gold comes with more than one atomic number |
-| `P04` | yes | cloze | affirmative | colloquial | reverse | **NO** | More than one atomic number is what gold has: ___ |
+| `P04` | yes | cloze | affirmative | colloquial | reverse | **NO** | The statement "More than one atomic number is what gold has" is ___. |
 | `P05` | yes | declarative | negated | formal | direct | **YES** | It is not the case that gold has more than one atomic number — YES or NO? |
 | `P06` | — | interrogative | negated | formal | reverse | **YES** | Is the following statement false? More than one atomic number belongs to gold |
-| `P07` | — | cloze | negated | colloquial | direct | **YES** | It is not the case that gold comes with more than one atomic number: ___ |
+| `P07` | — | cloze | negated | colloquial | direct | **YES** | The statement "It is not the case that gold comes with more than one atomic number" is ___. |
 | `P08` | — | declarative | negated | colloquial | reverse | **YES** | It is not the case that more than one atomic number is what gold has — YES or NO? |
 
 Every `(polarity × register × direction)` cell appears exactly once — 4 affirmative / 4 negated, 4 formal / 4 colloquial, 4 direct / 4 reverse. Syntax splits 3/3/2 because 8 is not divisible by 3 (ADR-0003).
@@ -132,13 +132,13 @@ Every `(polarity × register × direction)` cell appears exactly once — 4 affi
 | Probe | In 5-probe run | Syntax | Polarity | Register | Direction | Expects | Question |
 |---|---|---|---|---|---|---|---|
 | `P01` | yes | interrogative | affirmative | formal | direct | **1789** | What is the year of the first holder of the office of President of the United States taking office? |
-| `P02` | yes | cloze | affirmative | formal | reverse | **YES** | 1789 is the year of the first holder of the office of President of the United States taking office: ___ |
+| `P02` | yes | cloze | affirmative | formal | reverse | **YES** | The statement "1789 is the year of the first holder of the office of President of the United States taking office" is ___. |
 | `P03` | yes | declarative | affirmative | colloquial | direct | **1789** | The year of the first US president taking office is |
 | `P04` | yes | interrogative | affirmative | colloquial | reverse | **YES** | Is 1789 the year of the first US president taking office? |
-| `P05` | yes | cloze | negated | formal | direct | **NO** | It is not the case that the year of the first holder of the office of President of the United States taking office is 1789: ___ |
+| `P05` | yes | cloze | negated | formal | direct | **NO** | The statement "It is not the case that the year of the first holder of the office of President of the United States taking office is 1789" is ___. |
 | `P06` | — | declarative | negated | formal | reverse | **NO** | It is not the case that 1789 is the year of the first holder of the office of President of the United States taking office — YES or NO? |
 | `P07` | — | interrogative | negated | colloquial | direct | **NO** | Is it false that the year of the first US president taking office is 1789? |
-| `P08` | — | cloze | negated | colloquial | reverse | **NO** | It is not the case that 1789 is the year of the first US president taking office: ___ |
+| `P08` | — | cloze | negated | colloquial | reverse | **NO** | The statement "It is not the case that 1789 is the year of the first US president taking office" is ___. |
 
 Every `(polarity × register × direction)` cell appears exactly once — 4 affirmative / 4 negated, 4 formal / 4 colloquial, 4 direct / 4 reverse. Syntax splits 3/3/2 because 8 is not divisible by 3 (ADR-0003).
 

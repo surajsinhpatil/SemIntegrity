@@ -1,6 +1,6 @@
 # Results status — what is measured, what is pending
 
-**Updated 2026-09-26.**
+**Updated 2026-10-07.**
 
 One table per quantity the paper will report, with an explicit state. The point
 of this file is that **nothing here can be mistaken for a result that does not
@@ -51,7 +51,7 @@ must not be reported as such.
 
 | quantity | value | state |
 |---|---|---|
-| Canonicalisation rate | 93.75% (90/96) | **FAILS** the ≥95% CANON gate |
+| Canonicalisation rate | **100.00% (96/96)** — run3, post-rewrite | **PASSES** the ≥95% CANON gate |
 | Stage 0 labels | ANSWER 68 · NEGATED 4 · ABSTAIN 18 · INVALID 6 | DIAGNOSTIC |
 | D1 coverage | 0.551 | DIAGNOSTIC |
 | D1 mean PSCR | 0.300 | DIAGNOSTIC |
@@ -60,6 +60,48 @@ must not be reported as such.
 | D0 set-level | SATISFIED 7 · VIOLATION 5 | DIAGNOSTIC |
 | Truth accuracy | 0.767 | DIAGNOSTIC |
 | Abstention rate | 0.188 | DIAGNOSTIC |
+
+### CANON — FROZEN 2026-10-07
+
+| | before the rewrite | **run3, after Variant A** |
+|---|---|---|
+| INVALID | 6 / 96 | **0 / 96** |
+| canonicalisation rate | 93.75% | **100.00%** |
+| gate (≥95%, unchanged) | FAIL | **PASS** |
+| previous six INVALIDs | — | all six resolved |
+| new INVALIDs | — | none |
+
+**Frozen. The canonicaliser, the ≥95% threshold and the Variant A cloze wording
+are not to be modified on the strength of this result.** The threshold was never
+touched: `scripts/analysis/evaluate_cloze_rewrite.py` reads it out of
+`configs/inference/pilot.yaml` rather than carrying its own copy.
+
+**Provenance, stated precisely.** These figures were produced by the researcher
+on the cluster from `results/raw/pilot/qwen25-3b-run3.jsonl` and **reported into
+the session in prose**; the evaluator output itself was not pasted here, and
+ADR-0010 means no cluster fact is asserted from this environment. The durable
+evidence is the run3 JSONL and its report under `results/`, which
+`.gitignore` keeps out of the repository. Anyone re-deriving this figure should
+re-run the evaluator against that JSONL.
+
+**What this does and does not establish.** It establishes that Stage 0
+canonicalises every response in a 96-probe single-model run — the preregistered
+CANON criterion. It establishes nothing about PSCR, detector agreement, or any
+property of Qwen2.5-3B: one model, twelve constraints, no human gold. Those rows
+remain DIAGNOSTIC below.
+
+**Superseded figures, retained with their labels.** The 93.75% / 6-INVALID
+figure is the pre-rewrite observed result and stays the correct citation for the
+*pre-rewrite* pipeline. The **94.79% / 5-INVALID** figure in
+`docs/Q21_polarity_mapping_spec.md` §7 remains a **simulation** under an
+entity/date fall-through rule that was never adopted, is labelled as such there,
+and is now doubly superseded — it must not be quoted as an observed result.
+
+**A consequence for an open question.** With 0 INVALID there are no polar
+probes left whose reply names an answer-space member, so the entity/date
+fall-through question (HANDOFF decision 2) has **no live instance in this
+dataset**. It stays OPEN and undecided; it is simply no longer exercised by the
+pilot, which removes the evidence this run might otherwise have supplied.
 
 **Perfect-model artifact: 0.643 → 0.000.** Before the Q21 polarity mapping, a
 model answering every probe correctly scored PSCR 0.643 and the per-constraint
@@ -105,17 +147,20 @@ number by accident.
 - **Human validation.** Sample A (~400 representative pairs) and Sample B (~300
   enriched) are unauthored. No annotators, no adjudication, no Krippendorff α,
   no confusion matrices, no detector precision/recall against gold.
-- **The 120-constraint benchmark.** Only the 12-constraint pilot exists.
+- **The 120-constraint benchmark.** Only the 12-constraint pilot exists. The
+  *design* is settled and the 120-cell allocation is adopted, but no test
+  constraint is authored: no entities, no QIDs, no gold answers, no sources.
 - **Six of seven models.** Only Qwen2.5-3B has been loaded.
 - **Preregistration.** Not submitted.
 
 ## 7. What blocks what
 
 ```
-CANON gate (93.75%)
-  └── blocks: any pilot number becoming a RESULT
-        └── cause: 4 polar-cloze probes + 2 others, all cloze
-              └── needs: a probe-wording decision (touches ADR-0003)
+CANON gate — PASS, FROZEN 2026-10-07 (0/96 INVALID = 100.00%)
+  └── no longer blocks anything. Variant A resolved all six; no new INVALIDs.
+        └── the remaining go/no-go criteria are untouched by this:
+              PROBE (human probe validation), D0AUDIT, NONDEGEN (D2/D3),
+              IAA (needs annotators), ABSTAIN. CANON was one of seven.
 
 human validation (not started)
   └── blocks: D2 checkpoint selection, D2 thresholds,
@@ -127,6 +172,10 @@ Q5 (ADR-0016)
 120-constraint benchmark (unauthored)
   └── blocks: the full run, every confirmatory contrast, the GLMM
         └── §4.13: authoring is the binding resource, not GPU time
+        └── design DECIDED 2026-10-06: ADR-0002, ADR-0003 and ADR-0017 approved;
+            allocation in docs/BENCHMARK_COVERAGE_MATRIX.md (Revision 3);
+            132 constraints and 1,056 primary probes to author
+            (docs/BENCHMARK_ACCOUNTING.md)
 ```
 
 ## 8. Standing prohibitions

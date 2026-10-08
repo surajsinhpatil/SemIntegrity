@@ -4,6 +4,12 @@
 
 Read-only. Exits non-zero on any structural problem, so a Slurm job can gate on
 it rather than discovering a malformed benchmark after the allocation starts.
+
+Most rules apply to the split named by ``--split``. Three cannot: a constraint id
+reused ACROSS splits, a dev constraint leaking a test entity set, and a
+corroborating source whose frozen artefact no longer checks out. Those load every
+split present on disk (and the corroboration store) and are always run, so none
+is a check that exists without a caller.
 """
 
 from __future__ import annotations
@@ -42,7 +48,10 @@ def main(argv: list[str] | None = None) -> int:
         for p in problems:
             print(f"  - {p}")
     else:
-        print(f"[PASS] probe sets: {args.k} per constraint, mutually equivalent, distinct factor cells")
+        print(
+            f"[PASS] probe sets: {args.k} per constraint, mutually equivalent, "
+            "all 8 factor cells present exactly once, no duplicate probe text"
+        )
 
     from ..detectors.d0.registry import default_registry
 
@@ -67,15 +76,75 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("[PASS] every formal_predicate resolves in the D0 registry")
 
+    validator = BenchmarkDesignValidator()
+
     if args.strict_lattice:
         print()
-        report = BenchmarkDesignValidator().validate(
+        report = validator.validate(
             constraints, split=split, known_predicates=registry.names()
         )
         print(report)
         problems.extend(r.rule for r in report.errors)
 
+    # --- cross-split rules ------------------------------------------------
+    # These two are meaningless within a single split, so they load whatever
+    # splits exist. A vacuous result is reported as vacuous: "nothing to compare"
+    # is not the same claim as "no overlap", and must not read like one.
+    print()
+    everything, present = _load_all_splits()
+    if not present:
+        print("[WARN] cross-split rules: no split could be loaded")
+    else:
+        print(f"[INFO] cross-split rules over {', '.join(present)}")
+
+        freeze_rule = validator.validate_corroboration_freeze(everything)
+        print(f"  {freeze_rule}")
+        if not freeze_rule.passed:
+            problems.append(freeze_rule.rule)
+
+        from ..kb.corroboration import CorroborationPolicy
+
+        policy = CorroborationPolicy()
+        print(f"  [{'INFO' if policy.configured else 'WARN'}] corroboration policy: "
+              f"{policy.describe()}")
+
+        id_rule = validator.validate_global_id_uniqueness(everything)
+        print(f"  {id_rule}")
+        if not id_rule.passed:
+            problems.append(id_rule.rule)
+
+        splits_present = {c.split for c in everything}
+        has_test = Split.TEST in splits_present
+        has_other = bool(splits_present - {Split.TEST})
+        if has_test and has_other:
+            dj = validator.validate_split_disjointness(everything)
+            print(f"  {dj}")
+            if not dj.passed:
+                problems.append(dj.rule)
+        else:
+            missing = "test" if not has_test else "dev/pilot"
+            print(
+                f"  [VACUOUS] dev_test_disjoint: no {missing} split on disk, so there "
+                "is nothing to compare. This is NOT a pass; it becomes meaningful "
+                "once both splits exist."
+            )
+
     return 1 if problems else 0
+
+
+def _load_all_splits() -> tuple[list, list[str]]:
+    """Every split present on disk, for the rules that span splits."""
+    out: list = []
+    present: list[str] = []
+    for name in (s.value for s in Split):
+        directory = data_path("benchmark") / name
+        if not (directory / "constraints.jsonl").is_file():
+            continue
+        constraints, _ = load_split(directory)
+        if constraints:
+            out.extend(constraints)
+            present.append(f"{name}={len(constraints)}")
+    return out, present
 
 
 if __name__ == "__main__":

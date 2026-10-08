@@ -29,10 +29,29 @@ secondary_model:
   formula: >-
     contradictions / evaluable_pairs ~ class * model_family
     + log(entity_sitelinks)
+    + answer_space_cardinality
     + probe_polarity + probe_syntax + probe_direction
     + (1 | schema/constraint)
     + (1 | domain)
   overdispersion_absorbs: residual_pair_dependence
+  # DECIDED 2026-10-06 (researcher) — ADR-0017, decisions A3 + A4.
+  answer_space_cardinality:
+    status: DECIDED
+    term: answer_space_cardinality
+    definition: "len(constraint.answer_space); 2 for boolean, 3 for entity/date as authored"
+    why: >-
+      Chance agreement between two independent draws from a closed space of size
+      m is 1/m, so the chance contradiction rate is 1 - 1/m: 0.667 at m=3 and
+      0.500 at m=2. ADR-0017 makes answer type a function of the schema axis, so
+      every class receives the same mix (10 entity / 10 boolean / 10 date) and
+      the same chance-PSCR of 0.611 — the balance, not the covariate, is what
+      protects the confirmatory contrast, because §4.11 states that "a bootstrap
+      on a difference in means cannot deliver covariate adjustment". The
+      covariate is retained in addition, for the model-based analyses, because
+      D1 and D4 also read answer_space and a residual cardinality effect would
+      otherwise load onto the class coefficient.
+    not_in_confirmatory_model: true
+    confirmatory_protection: "design balance (ADR-0017), not adjustment"
   # DECIDED 2026-09-11 (researcher) — option A, see ADR-0009.
   probe_factor_unit_conflict:
     status: DECIDED

@@ -117,3 +117,8 @@ Thumbs.db
 .idea/
 .vscode/
 !.vscode/settings.json.example
+
+# --- Generated Wikidata cache ------------------------------------------------
+# Keep existing tracked/frozen cache entries, but ignore newly generated cache.
+data/raw/wikidata_cache/**
+!data/raw/wikidata_cache/.gitkeep

@@ -165,11 +165,29 @@ simulation results.
 
 ## 7. Simulation results — pilot job 11969, Qwen2.5-3B, K=8
 
+> **CONDITIONAL / SIMULATION FIGURES — NOT THE OBSERVED RESULT.**
+> Decision A9, 2026-10-06. Everything in this section was computed by the
+> *offline simulation* in `scripts/analysis/simulate_polar_mapping.py`, under a
+> rule that **was not adopted**: it allowed entity/date fall-through on polar
+> probes. Production canonicaliser v1.1 is strict and does not.
+>
+> | | simulation (this section) | **OBSERVED, production v1.1** |
+> |---|---|---|
+> | canonicalisation rate | 94.8% | **93.75%** |
+> | remaining INVALID | 5 | **6 / 96** |
+>
+> The sixth is `K-C1-GEO-01-P06`, answered `'Melbourne'`: an answer-space member
+> given to a *polar* probe, which the strict rule discards rather than reading as
+> a contradiction. **The canonical observed figure is 6/96 = 93.75%**
+> (`docs/RESULTS_STATUS.md`). The numbers below must never be quoted as the
+> observed result, and the entity/date fall-through rule remains an open,
+> undecided option.
+
 Offline recompute of the 96 existing responses. No new inference.
 
-| | current | proposed |
+| | current | proposed (SIMULATED, with fall-through) |
 |---|---|---|
-| canonicalisation rate | 66.7% | **94.8%** (still FAIL, by one response) |
+| canonicalisation rate | 66.7% | **94.8%** — simulation only; observed is 93.75% |
 | recovered responses | — | **27** |
 | remaining INVALID | 32 | **5** |
 | D1 coverage | 0.253 | **0.571** |
@@ -204,10 +222,23 @@ pipeline would be wrong in unpredictable directions.
 
 ### Why 94.8% and not 99.0%
 
-Five responses remain INVALID. Four are the polar-cloze form of §5(b); one is a
-genuine off-target answer. Fixing the four cloze probes would give 1/96 INVALID
-= **99.0%**, comfortably past the gate. That is a probe-authoring change inside
-the frozen factor lattice (ADR-0003) and needs a decision, not an edit.
+In the simulation, five responses remain INVALID: four are the polar-cloze form
+of §5(b) and one is a genuine off-target answer. **Under production v1.1 it is
+six**, the sixth being `K-C1-GEO-01-P06`.
+
+**RESOLVED 2026-10-06 (Q24, decision A6).** The polar-cloze probes were rewritten
+to Variant A — `The statement "<stem>" is ___.` — and the record is in
+`docs/PROBE_REWRITE_LOG.md` (RW-001). Two corrections to what this section used
+to say:
+
+* it is **not** "inside the frozen factor lattice (ADR-0003)". §4.4.1 defines
+  probe equivalence on the formal representation, which excludes probe text; the
+  rewrite changed **0 of 96** formal representations and **0 of 96** factor
+  cells. The genuine concern was construct validity of the syntax factor, which
+  is narrower;
+* the 99.0% is a **conditional projection**, not an outcome. Canonicalisation is
+  a property of model responses and no inference has been re-run, so the gate
+  remains **FAIL at 93.75%**.
 
 ### Interpretation limits
 

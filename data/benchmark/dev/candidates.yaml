@@ -1,0 +1,514 @@
+# ===========================================================================
+# DEV SPLIT CANDIDATES — the 12 NEW dev constraints of ADR-0007 (amended
+# 2026-10-07). The 12 PILOT constraints are separate and are not rebuilt here.
+#
+# ADR-0007 requires the new dev cells to reuse the SAME schemas as test with
+# DIFFERENT entity instantiations. Every QID below was fetched before being
+# written, and the entity sets are disjoint from the test split's.
+# ===========================================================================
+meta:
+  authored_at: "2026-10-08"
+  authored_by: "assistant draft — pending researcher review"
+  split: dev
+  tier: primary
+  batch: 1
+  probes_per_constraint: 8
+  answer_type_rule: "ADR-0017 as amended 2026-10-07 — (axis, class); C2/C3 boolean"
+
+families:
+
+  # F-BIO-03 · axis 3 "Part-whole containment" · biology · dev
+  # Test's axis-3 biology family (F-BIO-13) is instantiated on
+  # {Panthera, Pantherinae, Felidae}; this one uses {tiger, Panthera}, a
+  # disjoint entity set, as ADR-0007 requires.
+  # Fetched: tiger (Q19939) P171 -> Panthera (Q127960), refs=2; Panthera
+  # (Q127960) P171 -> Pantherinae (Q230177), single value.
+  - family_id: F-BIO-03
+    domain: biology
+    theme: "a taxon within a higher taxon"
+    constraints:
+      - constraint_id: K-C1-BIO-03
+        schema_id: S-C1-03
+        class: C1
+        formal_predicate: s_c1_03
+        constraint_text: >-
+          A species sits within exactly one genus; the tiger sits within the genus
+          Panthera.
+        logical_form: "genus_of(tiger) = ?x"
+        gold_proposition: "The genus that contains the tiger is Panthera."
+        answer_type: entity
+        answer_space: ["Panthera", "Felis", "Lynx"]
+        gold_answer: "Panthera"
+        entities:
+          - {label: "tiger", qid: Q19939}
+          - {label: "Panthera", qid: Q127960}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q19939, property: P171, expect_qid: Q127960,
+             description: "tiger (Q19939) parent taxon (P171) -> Panthera (Q127960)"}
+          - {kind: claim_cardinality, subject_qid: Q19939, property: P171, expect_count: 1,
+             description: "exactly one P171 statement on the tiger, so the genus is unambiguous"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Is the tiger a big cat?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          subject_formal: "the tiger"
+          subject_colloquial: "the tiger"
+          relation_formal: "genus"
+          relation_colloquial: "genus"
+          object: "Panthera"
+        ambiguity_notes: >-
+          Felis and Lynx are deliberate distractors: both are genuine felid genera
+          and neither contains the tiger. DEV cell — tuning material only; it is
+          never scored as a test result.
+
+      - constraint_id: K-C2-BIO-03
+        schema_id: S-C2-03
+        class: C2
+        formal_predicate: s_c2_03
+        constraint_text: >-
+          Conjunctive: the tiger sits in the genus Panthera and Panthera sits in the
+          subfamily Pantherinae. Both links must hold.
+        logical_form: "genus_of(tiger) = Panthera AND subfamily_of(Panthera) = Pantherinae"
+        gold_proposition: "The tiger belongs to the genus Panthera, and Panthera belongs to the subfamily Pantherinae."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: "tiger", qid: Q19939}
+          - {label: "Panthera", qid: Q127960}
+          - {label: "Pantherinae", qid: Q230177}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q19939, property: P171, expect_qid: Q127960,
+             description: "conjunct 1 — tiger (Q19939) P171 -> Panthera (Q127960)"}
+          - {kind: claim, subject_qid: Q127960, property: P171, expect_qid: Q230177,
+             description: "conjunct 2 — Panthera (Q127960) P171 -> Pantherinae (Q230177)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Which subfamily contains Panthera?", answer_type: entity, gold_answer: "Pantherinae"}
+        surface:
+          claim_formal: "the tiger belongs to the genus Panthera, and Panthera belongs to the subfamily Pantherinae"
+          claim_colloquial: "tigers are in Panthera, and Panthera is in the Pantherinae"
+          claim_reverse_formal: "the genus Panthera contains the tiger and the subfamily Pantherinae contains Panthera"
+          claim_reverse_colloquial: "Panthera has the tiger in it, and Pantherinae has Panthera"
+        ambiguity_notes: >-
+          AXIS-3 C2 CAUTION: answering on the first conjunct alone is not
+          distinguishable from representing the conjunction (N/A-struct). DEV cell.
+
+      - constraint_id: K-C3-BIO-03
+        schema_id: S-C3-03
+        class: C3
+        formal_predicate: s_c3_03
+        constraint_text: >-
+          Universal: for every species x and genera y, z, if x sits in y and in z
+          then y = z. Instantiated on the tiger.
+        logical_form: "forall x,y,z: in(x,y) AND in(x,z) -> y = z"
+        gold_proposition: "The tiger sits in exactly one genus, namely Panthera."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "NO"
+        entities:
+          - {label: "tiger", qid: Q19939}
+          - {label: "Panthera", qid: Q127960}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q19939, property: P171, expect_qid: Q127960,
+             description: "the instantiating claim — tiger (Q19939) P171 -> Panthera (Q127960)"}
+          - {kind: claim_cardinality, subject_qid: Q19939, property: P171, expect_count: 1,
+             description: "uniqueness — exactly one P171 statement on the tiger (Q19939)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "What is the tiger's genus?", answer_type: entity, gold_answer: "Panthera"}
+        surface:
+          claim_formal: "the tiger sits in some genus other than Panthera"
+          claim_colloquial: "the tiger is in some genus besides Panthera"
+          claim_reverse_formal: "some genus other than Panthera contains the tiger"
+          claim_reverse_colloquial: "a genus other than Panthera has the tiger in it"
+        ambiguity_notes: >-
+          Expected answer is NO. REQUIRES_HUMAN_REVIEW — single-entity
+          instantiation (N/A-struct). DEV cell.
+
+  # F-HIS-02 · axis 2 "Disjoint category membership" · history · dev
+  # Test's axis-2 history family (F-HIS-12) is instantiated on
+  # {Kingdom of Italy, Triple Alliance, Allies of WWI, Central Powers};
+  # this one uses the Empire of Japan and the Axis Powers — a disjoint entity
+  # set, as ADR-0007 requires.
+  # Fetched: Empire of Japan (Q188712) P361 -> Axis Powers (Q43056) and ->
+  # Allies of the First World War (Q215669), both ZERO refs; P571 = +1868-01-03
+  # and P576 = +1947-05-03, both ZERO refs.
+  - family_id: F-HIS-02
+    domain: history
+    theme: "wartime alliance membership"
+    constraints:
+      - constraint_id: K-C1-HIS-02
+        schema_id: S-C1-02
+        class: C1
+        formal_predicate: s_c1_02
+        constraint_text: >-
+          Wartime alliances are mutually exclusive categories; the Empire of Japan
+          was part of the Axis Powers.
+        logical_form: "in(Empire of Japan, Axis Powers)"
+        gold_proposition: "The Empire of Japan was part of the Axis Powers."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: "Empire of Japan", qid: Q188712}
+          - {label: "Axis Powers", qid: Q43056}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q188712, property: P361, expect_qid: Q43056,
+             description: "Empire of Japan (Q188712) part of (P361) -> Axis Powers (Q43056)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Did the Empire of Japan fight in the Second World War?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          claim_formal: "the Empire of Japan was part of the Axis Powers"
+          claim_colloquial: "Japan was on the Axis side"
+          claim_reverse_formal: "the Axis Powers included the Empire of Japan"
+          claim_reverse_colloquial: "the Axis had Japan among them"
+        ambiguity_notes: >-
+          DEV cell — tuning material only. Japan is the case where the same state
+          sat in OPPOSITE coalitions in the two world wars, which is why it was
+          chosen: its First World War alignment is this family's C2 subject.
+
+      - constraint_id: K-C2-HIS-02
+        schema_id: S-C2-02
+        class: C2
+        formal_predicate: s_c2_02
+        constraint_text: >-
+          Conjunctive: the Empire of Japan was part of the Allies of the First World
+          War and later part of the Axis Powers. Both memberships must hold.
+        logical_form: "in(Japan, Allies of WWI) AND in(Japan, Axis Powers)"
+        gold_proposition: "The Empire of Japan was part of the Allies of the First World War and also part of the Axis Powers."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: "Empire of Japan", qid: Q188712}
+          - {label: "Allies of the First World War", qid: Q215669}
+          - {label: "Axis Powers", qid: Q43056}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q188712, property: P361, expect_qid: Q215669,
+             description: "conjunct 1 — Empire of Japan (Q188712) P361 -> Allies of the First World War (Q215669)"}
+          - {kind: claim, subject_qid: Q188712, property: P361, expect_qid: Q43056,
+             description: "conjunct 2 — Empire of Japan (Q188712) P361 -> Axis Powers (Q43056)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Were the Allies of the First World War and the Axis Powers the same coalition?", answer_type: boolean, gold_answer: "NO"}
+        surface:
+          claim_formal: "the Empire of Japan was part of the Allies of the First World War and also part of the Axis Powers"
+          claim_colloquial: "Japan was on the Allied side in the first war and the Axis side in the second"
+          claim_reverse_formal: "both the Allies of the First World War and the Axis Powers included the Empire of Japan"
+          claim_reverse_colloquial: "both coalitions had Japan, in different wars"
+        ambiguity_notes: >-
+          DEV cell. The conjunction looks contradictory and is not: the memberships
+          belong to different wars. A model treating alliance membership as timeless
+          will answer NO. AXIS-2 C2 CAUTION — D0 cannot distinguish a correct YES
+          from a lucky one (N/A-struct).
+
+      - constraint_id: K-C3-HIS-02
+        schema_id: S-C3-02
+        class: C3
+        formal_predicate: s_c3_02
+        constraint_text: >-
+          Universal: for every state x, if x belonged to the Axis Powers then x did
+          not belong to the Allies of the Second World War. Instantiated on Japan.
+        logical_form: "forall x: in(x, Axis) -> NOT in(x, Allies of WWII)"
+        gold_proposition: "No state belonged to both the Axis Powers and the Allies of the Second World War; Japan belonged only to the former."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "NO"
+        entities:
+          - {label: "Empire of Japan", qid: Q188712}
+          - {label: "Axis Powers", qid: Q43056}
+          - {label: "Allies of World War II", qid: Q329888}
+        evidence_checks:
+          - {kind: claim, subject_qid: Q188712, property: P361, expect_qid: Q43056,
+             description: "the instantiating claim — Q188712 P361 -> Q43056"}
+          - {kind: sparql_count, query_name: entities_with_both_properties,
+             query_params: {property_a: P361, value_a: Q43056, property_b: P361, value_b: Q329888},
+             expect_count: 0,
+             description: "disjointness evidenced POSITIVELY — no entity is part of both the Axis Powers (Q43056) and the Allies of World War II (Q329888)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Were the Axis and the Allies opposing sides in the Second World War?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          claim_formal: "the Empire of Japan belonged to both the Axis Powers and the Allies of the Second World War"
+          claim_colloquial: "Japan was on both the Axis and the Allied side in the Second World War"
+          claim_reverse_formal: "both the Axis Powers and the Allies of the Second World War included the Empire of Japan"
+          claim_reverse_colloquial: "both sides of the second war had Japan"
+        ambiguity_notes: >-
+          DEV cell. Expected answer is NO. The disjoint partner is the Allies of the
+          SECOND World War, not the First — Japan was in the latter, so using it
+          would have made the zero-count fail. REQUIRES_HUMAN_REVIEW for the
+          quantifier (N/A-struct).
+
+      - constraint_id: K-C4-HIS-02
+        schema_id: S-C4-02
+        class: C4
+        formal_predicate: s_c4_02
+        constraint_text: >-
+          Temporal: the Empire of Japan existed from 3 January 1868 to 3 May 1947, and
+          its Axis membership falls inside that interval.
+        logical_form: "in_at(Empire of Japan, Axis Powers, 1942) ; 1942 within [1868-01-03, 1947-05-03]"
+        gold_proposition: "In 1942 the Empire of Japan was part of the Axis Powers."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: "Empire of Japan", qid: Q188712}
+          - {label: "Axis Powers", qid: Q43056}
+        temporal_validity:
+          start: "1868-01-03"
+          end: "1947-05-03"
+          end_unknown: false
+          precision: day
+        evidence_checks:
+          - {kind: claim, subject_qid: Q188712, property: P361, expect_qid: Q43056,
+             description: "Empire of Japan (Q188712) P361 -> Axis Powers (Q43056)"}
+          - {kind: claim_literal, subject_qid: Q188712, property: P571,
+             expect_value: "+1868-01-03T00:00:00Z",
+             description: "interval start — Empire of Japan (Q188712) inception (P571) = 1868-01-03"}
+          - {kind: claim_literal, subject_qid: Q188712, property: P576,
+             expect_value: "+1947-05-03T00:00:00Z",
+             description: "interval end — Empire of Japan (Q188712) P576 = 1947-05-03"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which year did the Empire of Japan cease to exist?", answer_type: date, gold_answer: "1947"}
+        surface:
+          claim_formal: "in 1942 the Empire of Japan was part of the Axis Powers"
+          claim_colloquial: "back in 1942 Japan was on the Axis side"
+          claim_reverse_formal: "the Axis Powers in 1942 included the Empire of Japan"
+          claim_reverse_colloquial: "the Axis had Japan in it in 1942"
+        ambiguity_notes: >-
+          DEV cell. The queried year sits inside the polity's machine-verified
+          existence interval; the P361 statement itself carries no qualifiers, so the
+          interval is the ENTITY's, which is what temporal_validity records. The
+          successor state is modern Japan (Q17), a different item, so the sentence is
+          not true of 1960.
+
+  # F-SCI-04 · axis 4 "Event precedence" · science_technology · dev
+  # Test's axis-4 sci-tech family (F-SCI-14) is instantiated on
+  # {point-contact transistor, the 1948 announcing paper}; this one uses
+  # {point-contact transistor, integrated circuit}, a different entity set.
+  # Fetched: point-contact transistor (Q1515631) P575 = +1947; integrated
+  # circuit (Q80831) P575 = +1958.
+  - family_id: F-SCI-04
+    domain: science_technology
+    theme: "milestones in solid-state electronics"
+    constraints:
+      - constraint_id: K-C1-SCI-04
+        schema_id: S-C1-04
+        class: C1
+        formal_predicate: s_c1_04
+        constraint_text: >-
+          Two dated events stand in a fixed order; the point-contact transistor
+          precedes the integrated circuit.
+        logical_form: "earlier(invention(transistor), invention(IC)) = ?d"
+        gold_proposition: "Of the invention of the point-contact transistor and the invention of the integrated circuit, the earlier occurred in 1947."
+        answer_type: date
+        answer_space: ["1947", "1958", "1971"]
+        gold_answer: "1947"
+        entities:
+          - {label: "point-contact transistor", qid: Q1515631}
+          - {label: "integrated circuit", qid: Q80831}
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q1515631, property: P575,
+             expect_value: "+1947-00-00T00:00:00Z",
+             description: "event 1 — point-contact transistor (Q1515631) P575 = 1947"}
+          - {kind: claim_literal, subject_qid: Q80831, property: P575,
+             expect_value: "+1958-00-00T00:00:00Z",
+             description: "event 2 — integrated circuit (Q80831) P575 = 1958"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Did the transistor precede the integrated circuit?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          subject_formal: "the invention of the point-contact transistor and the invention of the integrated circuit"
+          subject_colloquial: "the transistor and the integrated circuit"
+          relation_formal: "earlier year"
+          relation_colloquial: "earlier year"
+          object: "1947"
+          question_word: "In what year"
+        ambiguity_notes: >-
+          DEV cell — tuning material only. 1971 (the first microprocessor) is a
+          deliberate distractor continuing the same sequence. Both dates are
+          year-precise in Wikidata and the gold is stated at year precision.
+
+      - constraint_id: K-C2-SCI-04
+        schema_id: S-C2-04
+        class: C2
+        formal_predicate: s_c2_04
+        constraint_text: >-
+          Conjunctive: the point-contact transistor dates from 1947 and the
+          integrated circuit from 1958. Both dates must hold.
+        logical_form: "invention(transistor) = 1947 AND invention(IC) = 1958"
+        gold_proposition: "The point-contact transistor dates from 1947, and the integrated circuit dates from 1958."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "YES"
+        entities:
+          - {label: "point-contact transistor", qid: Q1515631}
+          - {label: "integrated circuit", qid: Q80831}
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q1515631, property: P575,
+             expect_value: "+1947-00-00T00:00:00Z",
+             description: "conjunct 1 — Q1515631 P575 = 1947"}
+          - {kind: claim_literal, subject_qid: Q80831, property: P575,
+             expect_value: "+1958-00-00T00:00:00Z",
+             description: "conjunct 2 — Q80831 P575 = 1958"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Are transistors components of integrated circuits?", answer_type: boolean, gold_answer: "YES"}
+        surface:
+          claim_formal: "the point-contact transistor dates from 1947, and the integrated circuit dates from 1958"
+          claim_colloquial: "the transistor is from 1947 and the integrated circuit from 1958"
+          claim_reverse_formal: "1947 is the point-contact transistor's date and 1958 the integrated circuit's"
+          claim_reverse_colloquial: "1947 was the transistor and 1958 the integrated circuit"
+        ambiguity_notes: >-
+          DEV cell. AXIS-4 C2 CAUTION: both dates are separately well known, so a
+          YES is available without representing the conjunction (N/A-struct).
+
+      - constraint_id: K-C3-SCI-04
+        schema_id: S-C3-04
+        class: C3
+        formal_predicate: s_c3_04
+        constraint_text: >-
+          Universal: of the two inventions compared, the one with the earlier date
+          came first. Instantiated on the transistor and the integrated circuit.
+        logical_form: "forall x,y: date(x) < date(y) -> NOT preceded(y,x)"
+        gold_proposition: "The integrated circuit did not precede the point-contact transistor."
+        answer_type: boolean
+        answer_space: ["YES", "NO"]
+        gold_answer: "NO"
+        entities:
+          - {label: "point-contact transistor", qid: Q1515631}
+          - {label: "integrated circuit", qid: Q80831}
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q1515631, property: P575,
+             expect_value: "+1947-00-00T00:00:00Z",
+             description: "the earlier of the two — Q1515631 P575 = 1947"}
+          - {kind: claim_literal, subject_qid: Q80831, property: P575,
+             expect_value: "+1958-00-00T00:00:00Z",
+             description: "the later — Q80831 P575 = 1958, which is what makes the gold NO"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Which came first, the transistor or the integrated circuit?", answer_type: entity, gold_answer: "the transistor"}
+        surface:
+          claim_formal: "the integrated circuit preceded the point-contact transistor"
+          claim_colloquial: "the integrated circuit came before the transistor"
+          claim_reverse_formal: "the point-contact transistor came after the integrated circuit"
+          claim_reverse_colloquial: "the transistor came after the integrated circuit"
+        ambiguity_notes: >-
+          DEV cell. Expected answer is NO, evidenced by two positive checks
+          returning different years. REQUIRES_HUMAN_REVIEW for the quantifier
+          (N/A-struct).
+
+  # =====================================================================
+  # F-SCI-04 C4 · axis 4 · science_technology · date (ADR-0020)
+  # DEV/TEST DISJOINTNESS: this cell's entity set is {Q1515631, Q80831}, which
+  # no test constraint carries — the test family F-SCI-14 uses
+  # {Q1515631, Q21709231} throughout — and its gold proposition is about the
+  # integrated circuit, where the test C4 cell is about the 1948 transistor
+  # letter. ADR-0007 requires both to differ, not just one.
+  - family_id: F-SCI-04
+    domain: science_technology
+    theme: "milestones in solid-state electronics"
+    constraints:
+      - constraint_id: K-C4-SCI-04
+        schema_id: S-C4-04
+        class: C4
+        formal_predicate: s_c4_04
+        constraint_text: >-
+          Temporal: the integrated circuit followed the transistor — Wikidata
+          records its invention in 1958, eleven years after the 1947
+          point-contact transistor.
+        logical_form: "discovery(integrated_circuit) = 1958 ; after discovery(point_contact_transistor) = 1947"
+        gold_proposition: "The integrated circuit was invented in 1958."
+        answer_type: date
+        answer_space: ["1958", "1947", "1971"]
+        gold_answer: "1958"
+        entities:
+          - {label: "integrated circuit", qid: Q80831}
+          - {label: "point-contact transistor", qid: Q1515631}
+        temporal_validity:
+          start: "1958-01-01"
+          end: null
+          end_unknown: false
+          precision: year
+        evidence_checks:
+          - {kind: claim_literal, subject_qid: Q80831, property: P575,
+             expect_value: "+1958-00-00T00:00:00Z",
+             description: "the gold date — integrated circuit (Q80831) time of discovery (P575) = 1958, recorded only to the year"}
+          - {kind: claim_literal, subject_qid: Q1515631, property: P575,
+             expect_value: "+1947-00-00T00:00:00Z",
+             description: "the precedence term — point-contact transistor (Q1515631) P575 = 1947"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "Which came first, the transistor or the integrated circuit?", answer_type: entity, gold_answer: "point-contact transistor"}
+        surface:
+          subject_formal: "the integrated circuit"
+          subject_colloquial: "the microchip"
+          relation_formal: "year of invention"
+          relation_colloquial: "year it was invented"
+          object: "1958"
+          question_word: "In what year"
+        ambiguity_notes: >-
+          AXIS-4 PRECEDENCE: both terms are machine-verified and both are
+          recorded only to the year, so the eleven-year gap is year-against-year
+          and is stated as such. 1958 is Kilby's germanium device; Noyce's
+          silicon planar circuit of 1959 is a distinct claim and is NOT asserted
+          here, which is the standard objection to a single invention date for
+          the integrated circuit. The distractor 1971 is the Intel 4004
+          microprocessor. DEV SPLIT — tuning material, never scored.
+
+  # =====================================================================
+  # F-BIO-03 C4 · axis 3 · biology · entity (Revision 6 re-theme, Q29)
+  # DEV/TEST DISJOINTNESS: this cell's entity set is {Q19939, Q41083521,
+  # Q228283} (tiger), where the test C4 cell uses {Q140, Q15294488, Q228283}
+  # (lion); the gold propositions name different species. ADR-0007 requires
+  # both to differ, not just one.
+  - family_id: F-BIO-03
+    domain: biology
+    theme: "a taxon within a higher taxon"
+    constraints:
+      - constraint_id: K-C4-BIO-03
+        schema_id: S-C4-03
+        class: C4
+        formal_predicate: s_c4_03
+        constraint_text: >-
+          Temporal: the genus containing the tiger differs by date — the species
+          was published as Felis tigris in the genus Felis in 1758 and is now
+          placed in Panthera.
+        logical_form: "in_at(tiger, ?x, 1758) = Felis ; in_now(tiger) = Panthera"
+        gold_proposition: >-
+          The genus in which the tiger was originally described, in 1758, is
+          Felis.
+        answer_type: entity
+        answer_space: ["Felis", "Panthera", "Felidae"]
+        gold_answer: "Felis"
+        answer_aliases:
+          "Felis": ["genus Felis"]
+        entities:
+          - {label: tiger, qid: Q19939}
+          - {label: "Felis tigris", qid: Q41083521}
+          - {label: Felis, qid: Q228283}
+        temporal_validity:
+          start: "1758-01-01"
+          end: null
+          end_unknown: true
+          precision: year
+        evidence_checks:
+          - {kind: claim, subject_qid: Q19939, property: P1403, expect_qid: Q41083521,
+             description: "the superseded placement — tiger (Q19939) original combination (P1403) -> Felis tigris (Q41083521)"}
+          - {kind: claim, subject_qid: Q41083521, property: P171, expect_qid: Q228283,
+             description: "the ORIGINAL containing genus — Felis tigris (Q41083521) parent taxon (P171) -> Felis (Q228283)"}
+          - {kind: claim_qualifier_time, subject_qid: Q41083521, property: P225,
+             value_literal: "Felis tigris", qualifier_property: P574, expect_year: 1758,
+             description: "the date — P574 publication-year qualifier on Q41083521's P225 is 1758"}
+          - {kind: claim, subject_qid: Q19939, property: P171, expect_qid: Q127960,
+             description: "the PRESENT containing genus — tiger (Q19939) P171 -> Panthera (Q127960)"}
+        prerequisite_atomic_facts:
+          - {fact_id: F1, question: "In which genus is the tiger placed today?", answer_type: entity, gold_answer: "Panthera"}
+        surface:
+          subject_formal: "the tiger as originally described in 1758"
+          subject_colloquial: "the tiger as it was first named back in 1758"
+          relation_formal: "containing genus"
+          relation_colloquial: "genus it was put in"
+          object: "Felis"
+          question_word: "Which genus"
+        ambiguity_notes: >-
+          THE TIME INDEX IS LOAD-BEARING AND IS IN THE SUBJECT, and the transfer
+          date is NOT recorded and NOT invented — see the test cell
+          K-C4-BIO-13, which this mirrors on a different species.
+          temporal_validity carries `end: null` with `end_unknown: true` because
+          Wikidata dates the publication of the original combination, not the
+          move to Panthera. Felidae is the distractor here: a real containing
+          taxon of the tiger, but a family and never the genus. DEV SPLIT —
+          tuning material, never scored.

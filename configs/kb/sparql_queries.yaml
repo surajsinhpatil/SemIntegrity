@@ -1,0 +1,187 @@
+# ===========================================================================
+# Registered SPARQL queries for evidence retrieval.
+#
+# Why this file exists: the registry used to be a dict literal inside
+# `semintegrity/kb/evidence.py`, so every C3 uniqueness count and every Axis-5
+# ranking would have added a per-constraint query to a Python module — roughly
+# 50 of them, each a one-off, none reviewable as data. A query that decides
+# whether a benchmark fact is EVIDENCE_VERIFIED is part of the study's method
+# and belongs in configuration with the rest of it.
+#
+# This changes WHERE queries live, not the evidence methodology. The checks are
+# the same seven kinds; retrieval still goes through WikidataClient and the
+# frozen cache (ADR-0011); nothing here runs a query by itself.
+#
+# Rules this file is held to, enforced by src/semintegrity/kb/evidence.py:
+#   * every query has a NAME, a VERSION and a DESCRIPTION;
+#   * parameters are declared explicitly and substituted by name only;
+#   * a parameter value must match its declared `pattern`, so query text is
+#     deterministic and cannot be assembled from arbitrary strings;
+#   * `query` text is literal — no code builds or edits it;
+#   * `count_label` names the binding used for the human-readable sample.
+# ===========================================================================
+registry_version: 1
+provenance:
+  endpoint: "https://query.wikidata.org/sparql"
+  reached_via: semintegrity.kb.wikidata.WikidataClient.sparql
+  cached_as: "kind=sparql in data/raw/wikidata_cache (ADR-0011)"
+  note: >-
+    Results are cached like any other evidence lookup, so a FROZEN run replays
+    the recorded rows rather than re-querying. A query's text plus its bound
+    parameters is the cache key.
+
+parameter_patterns:
+  qid: "^Q[0-9]+$"
+  property: "^P[0-9]+$"
+
+queries:
+
+  # --- legacy, retained verbatim ----------------------------------------
+  # The pilot's K-C3-GEO-01 evidence was fetched with this exact text. It is
+  # kept unparameterised and byte-identical so that re-fetching the pilot
+  # reproduces the recorded evidence rather than a near-equivalent.
+  capitals_of_canberra:
+    version: 1
+    description: "Sovereign states whose capital (P36) is Canberra (Q3114)."
+    parameters: {}
+    count_label: countryLabel
+    superseded_by: sovereign_states_with_capital
+    # DO NOT RE-INDENT. The frozen cache is keyed on the query string, so this
+    # text must reproduce the recorded request byte-for-byte after .strip() or a
+    # FROZEN replay becomes a cache miss and a live re-query. The odd inner
+    # indentation is the original triple-quoted literal's, preserved on purpose
+    # and pinned by tests/unit/test_sparql_registry.py.
+    query: |
+      SELECT ?country ?countryLabel WHERE {
+                ?country wdt:P36 wd:Q3114 .
+                ?country wdt:P31/wdt:P279* wd:Q3624078 .
+                SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+              }
+
+  # --- C3: functional uniqueness ----------------------------------------
+  sovereign_states_with_capital:
+    version: 1
+    description: >-
+      Sovereign states whose capital (P36) is the given city. Counting the rows
+      evidences the C3 universal "no city is the capital of two sovereign
+      states" for that instantiation; expect_count: 1.
+    parameters:
+      city: qid
+    count_label: countryLabel
+    query: |
+      SELECT ?country ?countryLabel WHERE {
+        ?country wdt:P36 wd:{city} .
+        ?country wdt:P31/wdt:P279* wd:Q3624078 .
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+
+  inverse_property_subjects:
+    version: 1
+    description: >-
+      Subjects that point at a given value through a given property. The general
+      form of a functional-uniqueness count: with expect_count: 1 it evidences
+      that exactly one subject bears the relation to that value.
+    parameters:
+      property: property
+      value: qid
+    count_label: subjectLabel
+    query: |
+      SELECT ?subject ?subjectLabel WHERE {
+        ?subject wdt:{property} wd:{value} .
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+
+  # --- C2: joint membership ---------------------------------------------
+  entities_with_both_properties:
+    version: 1
+    description: >-
+      Entities satisfying two property/value pairs at once. Evidences a C2
+      conjunction as a conjunction rather than as two independent claims.
+    parameters:
+      property_a: property
+      value_a: qid
+      property_b: property
+      value_b: qid
+    count_label: itemLabel
+    query: |
+      SELECT ?item ?itemLabel WHERE {
+        ?item wdt:{property_a} wd:{value_a} .
+        ?item wdt:{property_b} wd:{value_b} .
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+
+  # --- Axis 5: extremal ranking (ADR-0018 ranked_source) ----------------
+  class_members_ranked_by_measure:
+    version: 1
+    description: >-
+      Members of a class, ordered by a numeric measure, highest first. Backs an
+      ADR-0018 `ranked_source`: `rank_of_argmax: 1` asserts the extremal bearer heads
+      this ordering. The ordering is part of the query text, so the ranking is
+      reproducible rather than re-derived.
+    parameters:
+      member_of: qid
+      measure: property
+    count_label: itemLabel
+    query: |
+      SELECT ?item ?itemLabel ?value WHERE {
+        ?item wdt:P31/wdt:P279* wd:{member_of} .
+        ?item wdt:{measure} ?value .
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+      ORDER BY DESC(?value)
+
+  located_members_ranked_by_measure:
+    version: 1
+    description: >-
+      Members of a class located within a given place, ordered by a numeric
+      measure, highest first. The comparison universe for a geographically
+      restricted superlative ("the highest summit wholly within Africa").
+    parameters:
+      member_of: qid
+      located_in: qid
+      measure: property
+    count_label: itemLabel
+    query: |
+      SELECT ?item ?itemLabel ?value WHERE {
+        ?item wdt:P31/wdt:P279* wd:{member_of} .
+        ?item wdt:P30 wd:{located_in} .
+        ?item wdt:{measure} ?value .
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+      ORDER BY DESC(?value)
+
+  # --- Axis 5: duration ranking (ADR-0021 computed ranked_source) -------
+  # Orders the holders of one office by how long they held it. The measure is
+  # DERIVED: Wikidata has no duration property for an office-holding, so the
+  # quantity exists only as the difference between the P580 and P582 qualifiers
+  # on a P39 statement. ADR-0021 records that ADR-0018's `RankedSource.query`
+  # field ("the ranked query, if the ranking was computed") admits exactly this.
+  #
+  # DETERMINISM IS LOAD-BEARING. An open-ended term — an incumbent with no P582
+  # — is closed against the FROZEN LITERAL DATE below, never against NOW().
+  # Measured 2026-10-08: with NOW() an incumbent's duration grows between runs,
+  # so the same registered version would return different numbers and the
+  # ranking would not be reproducible from the record. The literal is the date
+  # the universe was frozen; changing it is a new query VERSION, not an edit.
+  office_holders_ranked_by_duration:
+    version: 1
+    description: >-
+      Holders of a given office (P39), ordered by the duration of their holding,
+      longest first. Backs an ADR-0021 computed `ranked_source`:
+      `rank_of_argmax: 1` asserts the named bearer heads this ordering. The
+      ordering is part of the query text, so the ranking is reproducible from the
+      frozen snapshot rather than re-derived at read time.
+    parameters:
+      office: qid
+    count_label: itemLabel
+    query: |
+      SELECT ?item ?itemLabel ?start ?end ?days WHERE {
+        ?item p:P39 ?statement .
+        ?statement ps:P39 wd:{office} ;
+                   pq:P580 ?start .
+        OPTIONAL { ?statement pq:P582 ?end . }
+        BIND(COALESCE(?end, "2026-10-08T00:00:00Z"^^xsd:dateTime) AS ?endpoint)
+        BIND((?endpoint - ?start) AS ?days)
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+      ORDER BY DESC(?days)

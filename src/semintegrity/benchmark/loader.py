@@ -9,7 +9,7 @@ and writes it to a manifest, so "the frozen benchmark" is a checkable claim
 from __future__ import annotations
 
 import datetime as dt
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -79,6 +79,66 @@ def group_probes(probes: Sequence[Probe]) -> dict[str, list[Probe]]:
     return dict(grouped)
 
 
+#: The (polarity, register, directionality) cells ADR-0003 requires every
+#: constraint to carry EXACTLY ONCE. 2 x 2 x 2 = 8 = K, which is why this
+#: crossing is complete within a constraint while syntax rotates across them.
+REQUIRED_FACTOR_CELLS: frozenset[tuple[str, str, str]] = frozenset(
+    (pol, reg, direction)
+    for pol in ("affirmative", "negated")
+    for reg in ("formal", "colloquial")
+    for direction in ("direct", "reverse")
+)
+
+
+def check_factor_cell_completeness(probes: Sequence[Probe]) -> list[str]:
+    """ADR-0003: each constraint carries all 8 factor cells exactly once.
+
+    :func:`semintegrity.schemas.probe.assert_distinct_surfaces` is NOT a
+    substitute. It checks that the 4-tuples (syntax, polarity, register,
+    directionality) are pairwise distinct, and eight probes can satisfy that
+    while still missing a required (polarity, register, directionality) cell —
+    two probes differing only in syntax would pass distinctness and silently
+    break the exact class-level balance §4.4.2 depends on. Completeness and
+    distinctness are different properties and both are needed.
+    """
+    counts = Counter((p.polarity.value, p.register.value, p.directionality.value) for p in probes)
+    problems: list[str] = []
+    missing = sorted(REQUIRED_FACTOR_CELLS - set(counts))
+    if missing:
+        problems.append(
+            f"missing {len(missing)} required factor cell(s): "
+            + ", ".join("/".join(c) for c in missing)
+        )
+    repeated = sorted((cell, n) for cell, n in counts.items() if n > 1)
+    for cell, n in repeated:
+        problems.append(f"factor cell {'/'.join(cell)} appears {n} times, expected once")
+    unexpected = sorted(set(counts) - REQUIRED_FACTOR_CELLS)
+    for cell in unexpected:
+        problems.append(f"factor cell {'/'.join(cell)} is not one of the 8 required cells")
+    return problems
+
+
+def check_distinct_probe_texts(probes: Sequence[Probe]) -> list[str]:
+    """No two probes of one constraint may share surface text.
+
+    A HARD failure, not a warning: identical surfaces inflate apparent agreement
+    between probes that are supposed to be distinct paraphrases, which biases
+    every consistency metric computed over the pair.
+    """
+    seen: dict[str, str] = {}
+    problems: list[str] = []
+    for p in probes:
+        key = " ".join(p.probe_text.lower().split())
+        if key in seen:
+            problems.append(
+                f"probes {seen[key]} and {p.probe_id} have identical text "
+                "(identical surfaces inflate apparent agreement)"
+            )
+        else:
+            seen[key] = p.probe_id
+    return problems
+
+
 def check_probe_sets(
     constraints: Sequence[Constraint], probes: Sequence[Probe], *, k: int
 ) -> list[str]:
@@ -105,6 +165,10 @@ def check_probe_sets(
             assert_distinct_surfaces(group)
         except ValueError as exc:
             problems.append(f"{c.constraint_id}: {exc}")
+        # Completeness, on top of distinctness — see the docstring above.
+        if k == len(REQUIRED_FACTOR_CELLS):
+            problems.extend(f"{c.constraint_id}: {m}" for m in check_factor_cell_completeness(group))
+        problems.extend(f"{c.constraint_id}: {m}" for m in check_distinct_probe_texts(group))
         for p in group:
             if p.expected_answer not in c.answer_space and p.answer_type.value != "boolean":
                 problems.append(

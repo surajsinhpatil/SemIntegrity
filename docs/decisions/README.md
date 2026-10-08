@@ -40,6 +40,13 @@ is classified as **METHODOLOGY**. The tie-break is deliberate.
 | 0011 | ENGINEERING | Frozen knowledge-base cache architecture | ACCEPTED |
 | 0012 | **METHODOLOGY** | transformers, not vLLM, as the inference stack | PROPOSED — awaiting approval |
 | 0013 | **METHODOLOGY** | Apple MPS for development only, never final results | PROPOSED — awaiting approval |
+| 0019 | **METHODOLOGY** | §4.3 independent second-source policy: 8 providers, witness classification, P248 rule, frozen-artefact suitability | **APPROVED 2026-10-07** |
+| 0020 | **METHODOLOGY** | C4 temporal evidence routes: P580/P582 preferred, not mandatory | **APPROVED 2026-10-08** |
+| 0021 | **METHODOLOGY** | A computed (duration) ranking as an ADR-0018 `ranked_source` | **APPROVED 2026-10-08** |
+| 0022 | **METHODOLOGY** | A taxonomic-authority measure in an axis-5 comparison universe | **APPROVED 2026-10-08** |
+
+(ADRs 0014-0018 predate this index table and are not listed in it; the ADR
+files themselves are authoritative.)
 
 Status values: `PROPOSED — AWAITING RESEARCHER APPROVAL` · `APPROVED` ·
 `ACCEPTED` (engineering only) · `SUPERSEDED BY ADR-nnnn` · `REJECTED`

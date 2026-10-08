@@ -126,3 +126,40 @@ def test_raise_if_failed_surfaces_all_errors(validator, benchmark):
     with pytest.raises(DesignViolation) as exc:
         validator.validate(benchmark[:50]).raise_if_failed()
     assert "design rule(s) violated" in str(exc.value)
+
+
+# --- cross-split id uniqueness --------------------------------------------
+# `validate()` filters to one split before checking `unique_ids`, and the id
+# grammar carries no split field, so a TEST and a PILOT/DEV constraint can share
+# an id, pass both per-split validations, and merge in any join on
+# `constraint_id`. These tests pin the gap and its fix.
+def test_cross_split_ids_pass_when_splits_are_numbered_apart(validator, benchmark):
+    rule = validator.validate_global_id_uniqueness([*benchmark, *dev_set()])
+    assert rule.passed, str(rule)
+    assert rule.rule == "cross_split_ids"
+
+
+def test_cross_split_id_reuse_is_caught(validator, benchmark):
+    collider = benchmark[0].model_copy(update={"split": Split.PILOT})
+    rule = validator.validate_global_id_uniqueness([*benchmark, collider])
+    assert not rule.passed
+    assert any(benchmark[0].constraint_id in o for o in rule.offenders)
+    assert "test" in rule.offenders[0] and "pilot" in rule.offenders[0]
+
+
+def test_per_split_validation_cannot_see_a_cross_split_collision(validator, benchmark):
+    """Why the separate check is necessary rather than merely tidy."""
+    collider = benchmark[0].model_copy(update={"split": Split.PILOT})
+    both = [*benchmark, collider]
+    test_report = validator.validate(both, split=Split.TEST)
+    dev_report = validator.validate(both, split=Split.PILOT)
+    assert next(r for r in test_report.results if r.rule == "unique_ids").passed
+    assert next(r for r in dev_report.results if r.rule == "unique_ids").passed
+    assert not validator.validate_global_id_uniqueness(both).passed
+
+
+def test_unique_ids_still_catches_within_split_duplicates(validator, benchmark):
+    report = validator.validate([*benchmark, benchmark[0]], split=Split.TEST)
+    rule = next(r for r in report.results if r.rule == "unique_ids")
+    assert not rule.passed
+    assert "within this split" in rule.message

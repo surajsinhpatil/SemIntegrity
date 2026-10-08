@@ -8,6 +8,14 @@ lattice without waiting for real authoring.
 The guard: every constraint produced here carries ``split`` and a
 ``SYNTHETIC_MARKER`` in its notes, and `tests/unit/test_no_synthetic_leak.py`
 asserts no file under `data/benchmark/` ever contains that marker.
+
+**Cell indices here are NOT the adopted allocation.** :func:`full_benchmark`
+numbers its test constraints 1..6 per (class, domain), which is convenient for
+lattice tests but is exactly the numbering that collides with the 12 existing
+pilot ids. The real test split takes indices **11..16**, leaving 01..10 to
+pilot/dev — see `docs/BENCHMARK_ACCOUNTING.md`. So a cross-split check run
+against this fixture reports collisions by design; that is the fixture
+demonstrating the hazard, not the plan.
 """
 
 from __future__ import annotations
@@ -15,13 +23,36 @@ from __future__ import annotations
 import datetime as dt
 
 from semintegrity.schemas.constraint import Constraint, TemporalValidity
-from semintegrity.schemas.enums import AnswerType, ConstraintClass, Domain, Split
+from semintegrity.schemas.enums import ConstraintClass, Domain, Split
 from semintegrity.utils.ids import constraint_id, family_id, schema_id
 
 SYNTHETIC_MARKER = "SYNTHETIC-TEST-FIXTURE-NOT-REAL-DATA"
 
 _DOMAINS = list(Domain)
 _CLASSES = list(ConstraintClass)
+
+
+def _answer_fields(cid: str, cls: ConstraintClass, schema_index: int) -> dict:
+    """Answer type/space following ADR-0017's (axis, class) rule.
+
+    The fixture models the approved design rather than restating it, so the rule
+    is read from the same config the validator reads. A boolean space must be
+    exactly {YES, NO}; a date space is plausible-looking but synthetic.
+    """
+    from semintegrity.benchmark.design_validator import answer_type_for_cell
+
+    atype = answer_type_for_cell(schema_id(cls.value, schema_index), cls) or "entity"
+    if atype == "boolean":
+        return {"answer_type": "boolean", "answer_space": ["YES", "NO"], "gold_answer": "YES"}
+    if atype == "date":
+        base = 1800 + (schema_index * 7) % 90
+        space = [str(base), str(base + 11), str(base + 23)]
+        return {"answer_type": "date", "answer_space": space, "gold_answer": space[0]}
+    return {
+        "answer_type": "entity",
+        "answer_space": [f"AnsX-{cid}", f"AnsY-{cid}", f"AnsZ-{cid}"],
+        "gold_answer": f"AnsX-{cid}",
+    }
 
 
 def make_constraint(
@@ -69,9 +100,7 @@ def make_constraint(
             "temporal_validity": temporal.model_dump(mode="json") if temporal else None,
             "ambiguity_notes": "",
             "prerequisite_atomic_facts": [],
-            "answer_type": AnswerType.ENTITY.value,
-            "answer_space": [f"AnsX-{cid}", f"AnsY-{cid}", f"AnsZ-{cid}"],
-            "gold_answer": f"AnsX-{cid}",
+            **_answer_fields(cid, cls, sch),
             "split": split.value,
             "notes": SYNTHETIC_MARKER,
         }

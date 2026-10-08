@@ -21,7 +21,15 @@ from ..kb.evidence import run_check
 from ..kb.wikidata import WikidataClient
 from ..probes.factor_design import cells_for_constraint
 from ..probes.surface import realise, realised_factors
-from ..schemas.constraint import Constraint, Entity, Evidence, PrerequisiteFact, TemporalValidity
+from ..schemas.constraint import (
+    ComparisonUniverse,
+    Constraint,
+    CorroboratingSource,
+    Entity,
+    Evidence,
+    PrerequisiteFact,
+    TemporalValidity,
+)
 from ..schemas.enums import (
     ConstraintClass,
     Domain,
@@ -35,6 +43,8 @@ from ..schemas.probe import Probe
 from ..utils.ids import probe_id
 from ..utils.logging import get_logger
 from ..utils.paths import data_path
+from .design_validator import corroboration_reason
+from .ordering import constraint_indices
 
 log = get_logger(__name__)
 
@@ -64,21 +74,32 @@ def build(
     fetch_evidence: bool = False,
     promote_on_evidence: bool = False,
     cache_mode: CacheMode = CacheMode.LIVE,
+    split: Split = Split.PILOT,
+    tier: Tier = Tier.PILOT,
 ) -> BuildResult:
-    """Build constraint and probe records from the candidates document."""
+    """Build constraint and probe records from the candidates document.
+
+    ``split`` and ``tier`` default to PILOT so that rebuilding the 12 pilot
+    constraints reproduces them byte-for-byte; the 120 test and 12 new dev
+    constraints pass ``Split.TEST``/``Split.DEV`` with ``Tier.PRIMARY``. The
+    module name is historical — this is the general builder.
+    """
     result = BuildResult()
     client = None
     if fetch_evidence:
         client = WikidataClient(KBCache(data_path("wikidata_cache"), cache_mode))
 
-    class_index: dict[str, int] = {}
+    # Probe syntax depends on each constraint's canonical position within its
+    # class (ADR-0003), and that position is a function of the RECORDS, not of
+    # the order families happen to appear in the source file. So constraints are
+    # built first and probes second, with the ordering taken from
+    # :mod:`semintegrity.benchmark.ordering`.
+    pending: list[tuple[Constraint, dict]] = []
 
     for family in candidates["families"]:
         domain = Domain(family["domain"])
         for spec in family["constraints"]:
             cls = ConstraintClass(spec["class"])
-            idx = class_index.get(cls.value, 0)
-            class_index[cls.value] = idx + 1
 
             evidence: list[Evidence] = []
             sitelinks: dict[str, int] = {}
@@ -121,23 +142,47 @@ def build(
                 )
 
             constraint = _make_constraint(
-                spec, family, domain, cls, evidence, status, sitelinks, discrepancies
+                spec, family, domain, cls, evidence, status, sitelinks, discrepancies,
+                split=split,
             )
+
+            # §4.3 requires a second authoritative source for historical and
+            # temporal facts, and design_validator refuses a promoted constraint
+            # that lacks one. Without this the builder would mint EVIDENCE_VERIFIED
+            # records the validator then rejects — the two must not disagree about
+            # what a promotion requires.
+            if constraint.verification_status is not VerificationStatus.DRAFT:
+                reason = corroboration_reason(constraint)
+                if reason and not constraint.corroborating_sources:
+                    constraint = constraint.model_copy(
+                        update={"verification_status": VerificationStatus.DRAFT}
+                    )
+                    result.warnings.append(
+                        f"{constraint.constraint_id}: stays DRAFT — {reason}, so §4.3 "
+                        "requires a second authoritative source and none is recorded"
+                    )
             result.constraints.append(constraint)
 
             slots = spec["surface"]
             result.factor_realisation[constraint.constraint_id] = realised_factors(
                 slots=slots, answer_type=constraint.answer_type, gold_answer=constraint.gold_answer
             )
-            probes = _make_probes(constraint, slots, idx)
-            _check_distinct_texts(constraint.constraint_id, probes, result.warnings)
-            result.probes.extend(probes)
+            pending.append((constraint, slots))
+
+    indices = constraint_indices(result.constraints)
+    for constraint, slots in pending:
+        probes = _make_probes(
+            constraint, slots, indices[constraint.constraint_id], tier=tier
+        )
+        _check_distinct_texts(constraint.constraint_id, probes, result.warnings)
+        result.probes.extend(probes)
 
     return result
 
 
 def _make_constraint(
-    spec, family, domain, cls, evidence, status, sitelinks=None, discrepancies=None
+    spec, family, domain, cls, evidence, status, sitelinks=None, discrepancies=None,
+    *, split: Split = Split.PILOT
 ) -> Constraint:
     sitelinks = sitelinks or {}
     entities = [
@@ -179,9 +224,29 @@ def _make_constraint(
             "answer_space": _answer_space(spec),
             "gold_answer": str(spec["gold_answer"]),
             "answer_aliases": spec.get("answer_aliases", {}),
-            "split": Split.PILOT.value,
+            "split": split.value,
             "verification_status": status.value,
             "evidence": [e.model_dump(mode="json") for e in evidence],
+            # ADR-0018 and ADR-0019 both define a field the builder could not
+            # previously pass through, so axis-5 and corroboration-required cells
+            # were unauthorable through the production path. Read as given and
+            # validated by the schema; NOTHING is synthesised here. An absent key
+            # stays absent, which is what keeps a missing universe or a missing
+            # second source visible to the gates instead of silently filled in.
+            **(
+                {"comparison_universe": ComparisonUniverse.model_validate(
+                    spec["comparison_universe"]).model_dump(mode="json")}
+                if spec.get("comparison_universe")
+                else {}
+            ),
+            **(
+                {"corroborating_sources": [
+                    CorroboratingSource.model_validate(src).model_dump(mode="json")
+                    for src in spec["corroborating_sources"]
+                ]}
+                if spec.get("corroborating_sources")
+                else {}
+            ),
             "review_notes": _review_notes(spec, discrepancies or []),
             "authored_by": "assistant draft — pending researcher review",
             "authored_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -220,7 +285,9 @@ def _review_notes(spec, discrepancies=()) -> str:
     return " ".join(notes)
 
 
-def _make_probes(constraint: Constraint, slots: dict, constraint_index: int) -> list[Probe]:
+def _make_probes(
+    constraint: Constraint, slots: dict, constraint_index: int, *, tier: Tier = Tier.PILOT
+) -> list[Probe]:
     probes: list[Probe] = []
     for i, cell in enumerate(cells_for_constraint(constraint_index, K_PILOT), start=1):
         r = realise(
@@ -250,12 +317,16 @@ def _make_probes(constraint: Constraint, slots: dict, constraint_index: int) -> 
                 directionality=cell.directionality.value,
                 factor_cell_index=cell.cell_index,
                 probe_text=r.text,
-                tier=Tier.PILOT.value,
+                tier=tier.value,
                 track=Track.A.value,
                 expected_answer=r.expected_answer,
                 validation_status=ValidationStatus.DRAFT.value,
                 generated_at=dt.datetime.now(dt.timezone.utc).isoformat(),
-                notes=f"form={r.form}; pilot_run_subset={'yes' if i <= 5 else 'no'}",
+                notes=(
+                    f"form={r.form}; pilot_run_subset={'yes' if i <= 5 else 'no'}"
+                    if tier is Tier.PILOT
+                    else f"form={r.form}"
+                ),
             )
         )
     return probes

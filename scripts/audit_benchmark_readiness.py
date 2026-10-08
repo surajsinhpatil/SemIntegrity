@@ -228,10 +228,74 @@ def check_gpu_facts() -> Check:
 
 
 def check_canon_gate() -> Check:
-    return Check("CANON go/no-go (>=95%)", FAIL,
-                 "93.75% on the pilot (6/96 INVALID, all cloze). "
-                 "configs/inference/pilot.yaml on_failure: 'pipeline revision BEFORE "
-                 "the full benchmark is authored'")
+    # FROZEN 2026-10-07. Run3 on the rewritten probes returned 0/96 INVALID.
+    # Researcher-reported from the cluster; ADR-0010 means this environment
+    # asserts no cluster fact of its own. See docs/RESULTS_STATUS.md for the
+    # provenance and for what the figure does and does not establish.
+    return Check("CANON go/no-go (>=95%)", PASS,
+                 "100.00% (0/96 INVALID) on pilot run3 after the Variant A cloze "
+                 "rewrite; all six previous INVALIDs resolved, no new ones. FROZEN "
+                 "2026-10-07 — canonicaliser, threshold and wording not to be "
+                 "modified on the strength of it. One model, 12 constraints: this "
+                 "is the CANON criterion only, not a result about Qwen2.5-3B")
+
+
+def check_corroboration_policy() -> Check:
+    """§4.3's second-source requirement needs a provider policy to be usable.
+
+    The MECHANISM is implemented and enforced; the policy naming which external
+    sources count as independent authorities is a methodology decision and is
+    deliberately unconfigured. BLOCKED rather than FAIL: nothing is broken, a
+    decision is outstanding.
+    """
+    from semintegrity.kb.corroboration import CorroborationPolicy
+
+    policy = CorroborationPolicy()
+    if policy.configured:
+        return Check("corroboration policy", PASS, policy.describe())
+    return Check(
+        "corroboration policy", BLOCKED,
+        policy.describe()
+        + "; 81/132 constraints require a second source and none can be accepted "
+        "until configs/benchmark/corroboration_policy.yaml names approved providers "
+        "and states an independence criterion",
+    )
+
+
+def check_cross_split_ids() -> Check:
+    """§ ADR-0007: no constraint_id may be reused across splits.
+
+    Runs the real check against whatever splits exist on disk. While only the
+    pilot exists the check is VACUOUS and says so — a check that cannot
+    discriminate has not passed.
+    """
+    from semintegrity.benchmark.design_validator import BenchmarkDesignValidator
+    from semintegrity.benchmark.loader import load_split
+    from semintegrity.utils.paths import data_path
+
+    root = data_path("benchmark")
+    constraints = []
+    present = []
+    for name in ("pilot", "dev", "test"):
+        try:
+            cons, _ = load_split(root / name)
+        except (FileNotFoundError, OSError):
+            continue
+        if cons:
+            constraints.extend(cons)
+            present.append(f"{name}={len(cons)}")
+
+    rule = BenchmarkDesignValidator().validate_global_id_uniqueness(constraints)
+    splits = {c.split.value for c in constraints}
+    if not rule.passed:
+        return Check("cross-split id uniqueness", FAIL, rule.message)
+    if len(splits) < 2:
+        return Check("cross-split id uniqueness", BLOCKED,
+                     f"only one split exists on disk ({', '.join(present) or 'none'}); "
+                     "the check cannot discriminate until the test split is authored. "
+                     "Allocation defence: test cells take index 11..16, pilot/dev keep 01..10")
+    return Check("cross-split id uniqueness", PASS,
+                 f"{', '.join(present)} — no constraint_id reused across splits")
 
 
 def check_human_validation() -> Check:
@@ -241,13 +305,39 @@ def check_human_validation() -> Check:
 
 
 def check_benchmark_authored() -> Check:
+    """Progress against the 120-constraint TEST split, counted from disk.
+
+    Reports the real state of each split rather than assuming only the pilot
+    exists: authoring the test split began 2026-10-07, and an audit that cannot
+    see it would understate progress while still, correctly, failing.
+    """
     from semintegrity.benchmark.loader import load_split
+    from semintegrity.schemas.enums import VerificationStatus
     from semintegrity.utils.paths import data_path
-    cons, probes = load_split(data_path("benchmark") / "pilot")
+
+    counts: list[str] = []
+    n_test = 0
+    n_test_probes = 0
+    n_verified = 0
+    for name in ("pilot", "test", "dev"):
+        directory = data_path("benchmark") / name
+        if not (directory / "constraints.jsonl").is_file():
+            continue
+        cons, probes = load_split(directory)
+        counts.append(f"{name}={len(cons)}c/{len(probes)}p")
+        if name == "test":
+            n_test, n_test_probes = len(cons), len(probes)
+            n_verified = sum(
+                c.verification_status is not VerificationStatus.DRAFT for c in cons
+            )
+    detail = ", ".join(counts) or "nothing on disk"
+    if n_test >= 120:
+        return Check("120-constraint benchmark authored", PASS,
+                     f"{detail}; {n_verified}/{n_test} test constraints past DRAFT")
     return Check("120-constraint benchmark authored", FAIL,
-                 f"only the {len(cons)}-constraint pilot exists "
-                 f"({len(probes)} probes). 120 x 8 = 960 needed; §4.13 calls authoring "
-                 "the binding resource, not GPU time")
+                 f"{detail}. The test split needs 120 constraints x 8 probes = 960; "
+                 f"{n_test} authored ({n_test_probes} probes), {n_verified} past DRAFT. "
+                 "§4.13 calls authoring the binding resource, not GPU time")
 
 
 def main() -> int:
@@ -260,6 +350,7 @@ def main() -> int:
         check_slurm_resources(), check_storage_headroom(),
         check_gpu_facts(), check_canon_gate(),
         check_human_validation(), check_benchmark_authored(),
+        check_cross_split_ids(), check_corroboration_policy(),
     ]
     width = max(len(c.name) for c in checks)
     print("=" * (width + 60))

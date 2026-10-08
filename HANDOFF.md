@@ -1,6 +1,6 @@
 # SemIntegrity — session handoff
 
-**Updated 2026-09-26.** Read this, then `PROJECT_STATUS.md`, then
+**Updated 2026-10-07.** Read this, then `PROJECT_STATUS.md`, then
 `docs/OPEN_QUESTIONS.md`. `proposal/semintegrity_proposal.docx` is the
 authoritative spec and overrides anything here.
 
@@ -29,8 +29,11 @@ gate, and that is the current work.**
 | A100, bf16, pinned revision, fully offline | ✅ |
 | Qwen2.5-3B, 96-probe K=8 pilot | ✅ run TWICE, byte-identical |
 | Q21 polarity mapping in production | ✅ PSCR artifact 0.643 → 0.000 |
-| **CANON gate (≥95%)** | ❌ **93.75%** |
-| D2 / D3 / D4 | ❌ not implemented; D4 method unresolved |
+| **CANON gate (≥95%)** | ✅ **100.00% (0/96)** on run3 — FROZEN 2026-10-07 |
+| Benchmark design (ADR-0002, ADR-0003, ADR-0017) | ✅ approved 2026-10-06 |
+| 120-cell allocation | ✅ adopted (`docs/BENCHMARK_COVERAGE_MATRIX.md` rev 3) |
+| D0 per-schema registrations (24) | ✅ implemented, honest scope (A5) |
+| D2 / D3 / D4 | ✅ implemented; D4 method still unresolved (Q5) |
 | Human validation | ❌ not started |
 | Full benchmark (120 × 8 × 7) | ❌ not run |
 
@@ -92,23 +95,34 @@ belong in `work_dir`.
 
 ## DECISIONS WAITING ON THE RESEARCHER
 
-**1. The four polar-cloze probes — blocks the CANON gate.**
-`"<assertion>: ___"` does not cue YES/NO, so the model completes the sentence
-instead. All six remaining INVALIDs are cloze; four are bare echoes of a noun in
-the prompt (`'Au'`, `'Au'`, `'Canberra'`, `'CANBERRA'`). **Confirmed reproducible
-across two runs.** They are the only reason canonicalisation is 93.75% rather
-than 100%. Rewording touches the factor lattice (ADR-0003). The pilot split is
-DRAFT, not frozen, so no freeze blocks it.
+**1. ~~The four polar-cloze probes~~ — RESOLVED 2026-10-06 (Q24, decision A6).**
+`"<assertion>: ___"` did not cue YES/NO. All six INVALIDs were this form; four
+were echoes of the assertion's *subject* (`'Au'`, `'Au'`, `'Canberra'`,
+`'CANBERRA'`), reproducible across two runs. Rewritten to Variant A —
+`The statement "<stem>" is ___.` — across all 28 probes of the form; record in
+`docs/PROBE_REWRITE_LOG.md`.
 
-**2. entity/date fall-through on polar probes.** Deferred until after the
-re-run, which has now happened. Strict rule discards `K-C1-GEO-01-P06`
+**Correction to what this file used to say:** rewording does **not** touch the
+factor lattice. §4.4.1 defines probe equivalence on the formal representation,
+which excludes probe text, and the rewrite changed **0 of 96** formal
+representations and 0 of 96 factor cells. The genuine concern was construct
+validity of the syntax factor.
+
+**Settled 2026-10-07:** run3 returned **0/96 INVALID = 100.00%**, so the gate
+PASSES and is frozen. All six resolved, no new INVALIDs.
+
+**2. entity/date fall-through on polar probes — STILL OPEN, and now unexercised.**
+With 0 INVALID on run3 there is no polar probe left whose reply names an
+answer-space member, so the pilot no longer provides evidence either way. The
+question is undecided, not closed. Strict rule discards `K-C1-GEO-01-P06`
 (`'Melbourne'`), previously a counted contradiction. Allowing fall-through for
 entity/date only — where the answer space is disjoint from {YES,NO} and cannot
 be confused with a polarity inversion — recovers it: 6 → 5 INVALID, 93.75% →
 94.79%. Still short of the gate.
 
-**3. D2 needs the dev split** (ADR-0007: 24 constraints, disjoint from the 120,
-unauthored). **D4 needs its `distribution_construction` resolved** (Q5).
+**3. D2 needs the dev split** (ADR-0007: 24 constraints, disjoint from the 120;
+12 absorbed from the pilot, 12 still unauthored). **D4 needs its
+`distribution_construction` resolved** (Q5, ADR-0016 — untouched).
 
 Also outstanding from earlier: the 1787/1789 adjudication on the two POL
 constraints, a second annotator (~31 h), and the professor's six notes.
@@ -149,6 +163,18 @@ constraints, a second annotator (~31 h), and the professor's six notes.
     recorded as different answers. It did not merely inflate PSCR, it INVERTED
     the per-constraint ordering.
 
+14. **A guard whose docstring outran its code** — `_unique_ids` was documented
+    as checking that "constraint/family/schema ids are well-formed and unique"
+    while checking only `constraint_id` duplicates, and `validate()` filters to
+    one split first, so a test/pilot id collision passed both validations.
+    `validate_global_id_uniqueness` now covers it and the readiness audit runs
+    it.
+15. **A probe's surface decided by file layout** — `constraint_index` drives
+    ADR-0003's syntax rotation and came from the order families appeared in
+    `candidates.yaml`, so re-ordering a YAML file would have re-worded a third of
+    the probes. Now derived from the records
+    (`semintegrity.benchmark.ordering`).
+
 **The recurring lesson:** a check that cannot run has not passed — and a test
 can encode a mistake as confidently as a requirement. The test written alongside
 bug 12 asserted the caches belong on NFS, and would have rejected the fix.
@@ -167,3 +193,9 @@ bug 12 asserted the caches belong on NFS, and would have rejected the fix.
 | `scripts/analysis/inspect_stage0.py` | why Stage 0 labelled each response |
 | `scripts/analysis/compare_runs.py` | run-to-run determinism check |
 | `tests/unit/test_perfect_model_invariant.py` | the guard that must never fail |
+| `docs/BENCHMARK_COVERAGE_MATRIX.md` | the adopted 120-cell allocation |
+| `docs/AUTHORING_PLAN.md` | the 132-constraint plan, gates and evidence routes |
+| `docs/BENCHMARK_ACCOUNTING.md` | 144 at freeze · 132 new · 1,056 new probes |
+| `docs/PROBE_REWRITE_LOG.md` | §4.4.5 step 4: rewrite and discard rates |
+| `docs/DESIGN_RESOLUTION_2026-10-06.md` | the evidence behind A1–A9 |
+| `src/semintegrity/benchmark/ordering.py` | pins every probe's syntax |

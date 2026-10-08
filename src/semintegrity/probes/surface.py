@@ -13,7 +13,7 @@ syntax           entity form                            boolean / date form
 ===============  =====================================  ==============================
 declarative      ``The capital city of Australia is``    ``<claim> — YES or NO?``
 interrogative    ``What is the capital city of ...?``    ``Is <claim>?``
-cloze            ``The capital city of ... is ___.``      ``<claim>: ___``
+cloze            ``The capital city of ... is ___.``      ``The statement "<claim>" is ___.``
 ===============  =====================================  ==============================
 
 **directionality** decides which side of the relation is queried. §4.7 states
@@ -157,6 +157,35 @@ def _sentence(text: str) -> str:
     return f"{text[0].upper()}{text[1:]}" if text else text
 
 
+def _polar_cloze(stem: str) -> str:
+    """The cloze frame for a YES/NO probe (CANON Variant A, approved 2026-10-06).
+
+    The earlier frame was ``f"{stem}: ___"``. Colon-plus-blank reads as a
+    ``label: value`` gloss, so the model supplied what the sentence was *about*
+    rather than a truth value: on pilot job 11969/12095 six of the 28 polar-cloze
+    probes (21.4%) came back as a bare noun from the prompt -- ``'Au'``,
+    ``'Canberra'``, ``'CANBERRA'``, ``'Melbourne'`` -- and the echoed token was
+    the assertion's SUBJECT, not the one adjacent to the blank. The declarative
+    polar frame already carries an explicit ``"-- YES or NO?"`` cue and the
+    interrogative frame cues a yes/no by its syntax; the cloze frame carried no
+    cue at all, so the Track A instruction ("if the expected answer is yes or
+    no, reply with exactly YES or NO") could not fire.
+
+    This frame puts the blank in a slot only a truth value can fill: the sentence
+    already has an explicit subject (*the statement*), so the gloss reading is
+    unavailable. ``"true"`` and ``"false"`` are already in the canonicaliser's
+    token sets, so no alias-table change is spent on this (§5.6).
+
+    §4.4.5 step 4 -- "Rewrite or discard failures; record the discard rate" --
+    is the protocol this follows; the record is in
+    ``docs/PROBE_REWRITE_LOG.md``. The rewrite changes probe SURFACE TEXT only:
+    §4.4.1 defines equivalence on the formal representation, and 0 of the 96
+    pilot probes change any formal field. See
+    ``tests/unit/test_polar_cloze_wording.py``.
+    """
+    return f'The statement "{stem}" is ___.'
+
+
 def _frame_author_claim(syntax: Syntax, claim: str, negated: bool) -> str:
     """Embed an arbitrary author-written sentence in a grammatical frame."""
     truth = "false" if negated else "true"
@@ -164,7 +193,8 @@ def _frame_author_claim(syntax: Syntax, claim: str, negated: bool) -> str:
         return f"Is the following statement {truth}? {_sentence(claim)}"
     if syntax is Syntax.CLOZE:
         prefix = "It is not the case that " if negated else ""
-        return f"{_sentence(prefix + claim) if prefix else _sentence(claim)}: ___"
+        stem = _sentence(prefix + claim) if prefix else _sentence(claim)
+        return _polar_cloze(stem)
     prefix = "It is not the case that " if negated else ""
     return f"{_sentence(prefix + claim) if prefix else _sentence(claim)} — YES or NO?"
 
@@ -184,7 +214,7 @@ def _frame_assembled(cell, subject: str, relation: str, obj: str, negated: bool)
         return f"Is it false that {positive}?" if negated else question
     if cell.syntax is Syntax.CLOZE:
         stem = f"It is not the case that {positive}" if negated else _sentence(positive)
-        return f"{stem}: ___"
+        return _polar_cloze(stem)
     stem = f"It is not the case that {positive}" if negated else _sentence(positive)
     return f"{stem} — YES or NO?"
 

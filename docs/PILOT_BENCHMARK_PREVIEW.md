@@ -2,6 +2,11 @@
 
 **12 constraints · 96 probes · built 2026-09-11 · ALL DRAFT · NOT FROZEN**
 
+> Probe texts below reflect the **Variant A** polar-cloze wording applied
+> 2026-10-06 (`docs/PROBE_REWRITE_LOG.md`, RW-001). This file is a hand-written
+> snapshot, not a generated one — no drift test covers it, so
+> `python scripts/benchmark/show_pilot.py` is authoritative if the two disagree.
+
 Show it live:
 
 ```bash
@@ -46,8 +51,8 @@ claimed on your behalf by any automated step.
 | K-C3-POL-01 | C3 | public_office | boolean | NO | 2/2 | *Is the following statement true? Some person has simultaneously held the offices of President and Vice President of the United States* |
 | K-C4-POL-01 | C4 | public_office | date | 1789 | 2/2 ⚠ | *What is the year of the first holder of the office of President of the United States taking office?* |
 | K-C1-SCI-01 | C1 | science_technology | entity | Au | 1/1 | *The chemical symbol of gold is ___.* |
-| K-C2-SCI-01 | C2 | science_technology | boolean | YES | 2/2 | *The chemical symbol for gold is Au and its atomic number is 79: ___* |
-| K-C3-SCI-01 | C3 | science_technology | boolean | NO | 2/2 | *Gold has more than one atomic number: ___* |
+| K-C2-SCI-01 | C2 | science_technology | boolean | YES | 2/2 | *The statement "The chemical symbol for gold is Au and its atomic number is 79" is ___.* |
+| K-C3-SCI-01 | C3 | science_technology | boolean | NO | 2/2 | *The statement "Gold has more than one atomic number" is ___.* |
 | K-C4-SCI-01 | C4 | science_technology | date | 1901 | 1/1 | *The year of the first award of the Nobel Prize in Physics is ___.* |
 
 ⚠ = carries a recorded source discrepancy requiring human adjudication.
@@ -84,7 +89,7 @@ class-level property (ADR-0003). Across the pilot all **24** factor cells appear
 | P03 | cloz / aff / colloq / direct | Canberra | The capital of Australia is ___. |
 | P04 | decl / aff / colloq / reverse | YES | Canberra is the capital of Australia — YES or NO? |
 | P05 | inte / neg / formal / direct | NO | Is it false that the capital city of Australia is Canberra? |
-| P06 | cloz / neg / formal / reverse | NO | It is not the case that Canberra is the capital city of Australia: ___ |
+| P06 | cloz / neg / formal / reverse | NO | The statement "It is not the case that Canberra is the capital city of Australia" is ___. |
 | P07 | decl / neg / colloq / direct | NO | It is not the case that the capital of Australia is Canberra — YES or NO? |
 | P08 | inte / neg / colloq / reverse | NO | Is it false that Canberra is the capital of Australia? |
 

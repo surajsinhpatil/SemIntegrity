@@ -1,0 +1,244 @@
+# ===========================================================================
+# §4.3 CORROBORATION POLICY — which sources count as an INDEPENDENT second
+# authoritative source.
+#
+# §4.3: "Wikidata is the primary source but is not treated as absolute truth.
+# Temporal constraints require date qualifiers (P580 start time, P582 end time),
+# and all historical and temporal facts are corroborated against a second
+# authoritative source."
+#
+# CONFIGURED 2026-10-07 by researcher decision, recorded in
+# docs/decisions/ADR-0019-corroboration-source-policy.md. Evidence base:
+# docs/CORROBORATION_SOURCE_FEASIBILITY.md (Revisions 2-3) and 158 HTTP probes.
+#
+# Every approved provider below was empirically verified as retrievable by an
+# honest plain unauthenticated GET and byte-stable across repeated retrievals.
+# No provider requiring a credential, a token, JavaScript execution or any
+# interaction with a bot-challenge is approved, and none is to be added by
+# working around an access control.
+#
+# ADMISSIBILITY IS NOT QUALIFICATION. A provider on this list does not
+# corroborate a claim; it is merely allowed to be considered. Only an
+# `independent-witness` classification against the specific Wikidata claim
+# satisfies §4.3 — see witness_classification.
+# ===========================================================================
+policy_version: 2
+status: CONFIGURED              # ADR-0019, approved 2026-10-07
+
+# --- the approved providers (ADR-0019 §3) -------------------------------
+# Eight. The three optional providers analysed in the feasibility study
+# (ibge, uk-parliament-api, official-organisational-record) are DELIBERATELY
+# NOT approved in this pass and may be added only if a concrete authored
+# constraint genuinely requires one.
+approved_independent_providers:
+  - crossref              # DOI registration-agency publication records
+  - un-treaties           # UN / League of Nations depositary records, treaties.un.org only
+  - govinfo               # U.S. Government Publishing Office, /content/ paths only
+  - nasa                  # NSSDCA master catalogue and NTRS documents
+  - standards-body        # BIPM (SI Brochure) and CIAAW
+  - official-gazette      # gesetze-im-internet.de, psp.cz, alex.onb.ac.at
+  - taxonomic-authority   # WoRMS, ChecklistBank / Catalogue of Life, ZooBank
+  - national-archives     # official archival institutions; NARA verified
+
+independence_criterion: >-
+  ADMISSIBILITY: a source is admissible as a candidate second source when its
+  content is not derived from Wikidata — not Wikidata, not a mirror, not a
+  Wikidata-derived or Wikidata-ingesting dataset, and not citing Wikidata or
+  Wikipedia as its authority for the fact. Assessed per provider in ADR-0019
+  against three questions: does it ingest, redistribute or cite
+  Wikidata/Wikipedia for this fact class (excluded); does it have its own
+  statutory, editorial, measurement or scholarly process producing the fact
+  (necessary); does its record predate Wikidata or Wikidata's claim (decisive
+  for statutes, treaties and dated publications).
+  QUALIFICATION: admissibility does not corroborate. Each source is classified
+  against the specific Wikidata claim it is offered for. `independent-witness`
+  — the claim does not cite this provider or source — is the ONLY classification
+  that satisfies §4.3 and the only one that may support promotion.
+  `same-witness` — the claim cites this provider or source, by a P248 "stated
+  in" value or by a reference URL on the same host — may be recorded as
+  descriptive provenance but DOES NOT satisfy the independent-corroboration
+  requirement and MUST NOT permit promotion past the corroboration gate.
+  Witness status is a property of the (claim, source) pair, never of a provider.
+
+# --- witness classification (ADR-0019 §2) -------------------------------
+# Enforced mechanically by semintegrity.kb.witness, which reads the Wikidata
+# claim's OWN references out of the frozen KB cache. It never trusts a
+# hand-written note.
+witness_classification:
+  qualifying: [independent-witness]
+  recorded_but_not_qualifying: [same-witness]
+  undetermined_blocks_promotion: true
+  determined_from: >-
+    the Wikidata claim's references in the frozen KB cache. A reference whose
+    reference-URL host matches the corroborating source's host, or whose P248
+    "stated in" target is listed under wikidata_stated_in_qids for that
+    provider, makes the source same-witness FOR THAT CLAIM. A claim carrying no
+    references at all cites nobody, so an admissible source is an
+    independent-witness for it.
+  # P248 targets are Wikidata items, so mapping one to a provider id is a human
+  # judgement. This map is EXPLICITLY EMPTY: nothing is assumed. An unresolved
+  # P248 reference yields `undetermined`, which blocks promotion — the
+  # classifier errs toward refusing, never toward accepting. A researcher adds
+  # an entry here once, per observed "stated in" item, after checking it.
+  wikidata_stated_in_qids: {}
+
+  # --- Q26, approved 2026-10-07 -----------------------------------------
+  # WITNESS IDENTITY IS DETERMINED AT PROVIDER LEVEL, NOT HOST LEVEL.
+  #
+  # The original rule matched a reference URL "on the same host". Live
+  # validation showed that is too narrow: Wikidata's
+  # Q533336 P361 -> Q2025902 cites www.nasa.gov, while the authoritative NASA
+  # artefact for the same fact is on nssdc.gsfc.nasa.gov. Both are the approved
+  # provider `nasa`, so the claim already cites that provider and the source is
+  # a SAME-WITNESS — but host equality returned independent-witness, in the
+  # direction that wrongly permits promotion. Five of the eight approved
+  # providers are deliberately multi-host categories, so the gap was structural.
+  #
+  # Ownership is established ONLY by an explicit entry below. Domain similarity
+  # proves nothing and is never inferred: `nasa.gov` does not vouch for an
+  # unlisted subdomain, and two providers could share a registrar. A cited host
+  # that is not listed here yields `undetermined`, which blocks promotion.
+  #
+  # Every host below was retrieved in the feasibility study (docs/
+  # CORROBORATION_SOURCE_FEASIBILITY.md §2.2-§2.3) unless its comment says
+  # otherwise. Listing a host can only make the classifier MORE likely to refuse,
+  # never more likely to accept.
+  provider_hosts:
+    crossref:
+      - api.crossref.org        # verified: stable JSON work records
+      - doi.org                 # verified: content negotiation, resolves to api.crossref.org
+    un-treaties:
+      - treaties.un.org         # verified: MTDSG XML byte-identical over 35 min
+    govinfo:
+      - www.govinfo.gov         # verified: /content/ PDF, stable
+    nasa:
+      - nssdc.gsfc.nasa.gov     # verified: NSSDCA master catalogue, stable
+      - ntrs.nasa.gov           # verified: document PDF, byte-stable
+      - www.nasa.gov            # NASA's primary host; the Q26 reference host
+    standards-body:
+      - www.bipm.org            # verified: SI Brochure PDF, stable
+      - ciaaw.org               # verified: atomic-weights page, stable
+    official-gazette:
+      - www.gesetze-im-internet.de   # verified: Grundgesetz, stable
+      - www.psp.cz                   # verified: Act 542/1992, stable (Windows-1250)
+      - alex.onb.ac.at               # verified: collection level only
+    taxonomic-authority:
+      - www.marinespecies.org   # verified: WoRMS REST, stable
+      - api.checklistbank.org   # verified: ChecklistBank/COL, stable
+      - zoobank.org             # verified: root only
+    national-archives:
+      - www.archives.gov                      # verified: NARA transcript, stable
+      - discovery.nationalarchives.gov.uk     # probed; UNSUITABLE as an artefact
+                                              # (unstable index) but it IS the
+                                              # institution's host, and identity is
+                                              # what this map decides
+
+# --- what is settled ----------------------------------------------------
+# The primary source can never corroborate itself. This is not a provider-list
+# choice; it is what "second source" means.
+excluded_as_second_source:
+  - id: wikidata
+    reason: >-
+      The primary source (§4.3). A second statement, a reference URL, a P248
+      "stated in" value or any other reference attached to the same Wikidata
+      claim is mediated by the primary source and is NOT automatically
+      independent. See p248_rule.
+
+# --- excluded on the independence test (ADR-0019 §4) --------------------
+# Each of these is FETCHABLE. Accessibility is not a qualification.
+excluded_on_independence_test:
+  - id: gbif
+    reason: aggregated checklists of unverified provenance; step (i) unanswered
+  - id: openalex
+    reason: uses Wikidata for entity reconciliation, and is hash-unstable
+  - id: nomisma
+    reason: >-
+      probed directly — its records declare skos:exactMatch to
+      wikidata.org/entity/*, DBpedia and Freebase, with 186 multilingual
+      prefLabels and a Google Sheets provenance source. A Wikimedia-ecosystem
+      concordance; and it states no terminal date in any case.
+  - id: pleiades
+    reason: same class of gazetteer with Wikidata concordances; unaudited
+  - id: trismegistos
+    reason: same class; could not be verified (TLS chain failure)
+  - id: papyri-info
+    reason: dates documents, not the propositions these cells rest on
+
+# --- P248 (ADR-0019 §5) -------------------------------------------------
+p248_rule: >-
+  A Wikidata P248 value or reference URL is a pointer, never evidence. The
+  document it names may be retrieved and frozen on the ordinary terms, but
+  because the claim cites it, it is same-witness FOR THAT CLAIM and therefore
+  does not satisfy §4.3 and must not support promotion. The same document may
+  be an independent-witness for a different claim that does not cite it.
+
+# --- frozen-artefact suitability (ADR-0019 §6) --------------------------
+# Forced by evidence: 12 of 41 probed artefacts returned different bytes on a
+# second retrieval, and seven hosts returned HTTP 200 with a challenge or an
+# empty JS shell. FETCHABLE IS NOT SUITABLE.
+frozen_artifact_suitability:
+  fetchable_is_not_sufficient: true
+  require_document_not_index: true      # search/index endpoints are discovery, never evidence
+  reject_challenge_or_shell_bodies: true
+  require_hash_stability: true          # byte-identical across two retrievals
+  record_charset: true
+  binary_encoding: base64               # store the document, not an extraction of it
+  prefer_smallest_authoritative_granule: true
+  min_document_bytes: 512               # below this an HTML response is a shell, not a document
+  # Q27 sub-finding, 2026-10-07: a 1,039-byte JS shell from e-sbirka.cz PASSED
+  # min_document_bytes and was caught only by the human propositional check. Byte
+  # size does not distinguish a document from a script that would fetch one, so
+  # an HTML response must additionally carry readable text. Measured on real
+  # artefacts: a Cloudflare challenge page yields 16 visible characters, while
+  # the smallest genuine document in the study yields ~5,000. This applies ONLY
+  # to HTML; PDF, XML, JSON and plain text are unaffected.
+  min_html_text_chars: 400
+  max_artifact_bytes: 26214400          # 25 MiB of stored artefact text; larger needs a smaller granule
+
+# --- requirements a corroborating source must meet ----------------------
+# These are mechanism, not policy, and are enforced by
+# design_validator._corroboration and the CorroboratingSource schema.
+required_of_every_corroborating_source:
+  identifiable: "a named provider, drawn from approved_independent_providers"
+  retrievable: "an absolute URL that is not a placeholder"
+  frozen: "a snapshot key in the corroboration store, plus a content_hash"
+  separate: "provider must not be an excluded_as_second_source id"
+  tied_to_the_fact: "fact_supported states the exact proposition corroborated"
+  independent_of_the_claim: "classified independent-witness by semintegrity.kb.witness"
+
+# One source must not be counted twice under different URLs. Identity is
+# established mechanically where possible; anything subtler is human review.
+duplicate_detection:
+  mechanical_keys: [provider, url_host, content_hash]
+  note: >-
+    Two entries sharing a provider, a URL host or a content hash are the same
+    source. Identity that cannot be established mechanically (a reprint, a
+    syndicated copy, a mirror on another domain) is a human-review matter and is
+    NOT silently accepted as independent.
+
+storage:
+  backend: semintegrity.kb.cache.KBCache
+  kind: corroboration
+  rationale: >-
+    The same generic store Wikidata evidence uses (ADR-0011), so a corroborating
+    artefact is frozen, content-addressed and replayable on the same terms. A
+    FROZEN run never reaches the network.
+
+# --- recorded gaps (ADR-0019 §7) ----------------------------------------
+# NOT closed by this policy, and NOT to be closed by weakening it.
+recorded_gaps:
+  - id: classical-empire-end
+    cells: 4
+    detail: >-
+      Family F-HIS-16 ("the end of a classical empire"). No qualifying route
+      found: no first-party instrument exists because the fact is a
+      historiographical convention; the institutional classical-studies
+      authorities fail the independence test or state no terminal date; the
+      open-access scholarly channel is retrievable but no document establishing
+      the proposition has been identified. These cells remain an explicit
+      corroboration gap. A tertiary exception is NOT permitted.
+  - id: landlocked-status
+    cells: 1
+    detail: >-
+      Family F-GEO-12's corroboration-required cell. Possibly instantiable on a
+      status fixed by a treaty, routing through un-treaties. UNVERIFIED.

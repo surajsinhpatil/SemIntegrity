@@ -29,6 +29,7 @@ WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 P_START_TIME = "P580"
 P_END_TIME = "P582"
 P_POINT_IN_TIME = "P585"
+P_POINT_IN_TIME = "P585"
 
 QID_RE = re.compile(r"^Q\d+$")
 
@@ -71,7 +72,15 @@ class EntityRecord:
 
 @dataclass(slots=True)
 class TimeQualifiedClaim:
-    """One statement with its P580/P582 validity interval (§4.3)."""
+    """One statement with its P580/P582 validity interval (§4.3).
+
+    ``point_in_time`` carries the P585 qualifier. A statement that is an
+    ASSESSMENT rather than a period — a conservation status, a measurement, a
+    census — is dated by P585 and has no validity interval, so neither
+    ``start_time`` nor ``end_time`` can express when it holds. It is read here
+    for the same reason ``end_time`` was: so a declared check can verify the
+    qualifier the fact actually carries.
+    """
 
     property_id: str
     value_qid: str | None
@@ -79,6 +88,8 @@ class TimeQualifiedClaim:
     start_time: str | None
     end_time: str | None
     rank: str = "normal"
+    point_in_time: str | None = None
+    qualifier_times: dict[str, str] = field(default_factory=dict)
 
 
 class WikidataClient:
@@ -166,7 +177,7 @@ class WikidataClient:
         return self.get_entity(qid).sitelinks
 
     def get_claims(self, qid: str, property_id: str) -> list[TimeQualifiedClaim]:
-        """Statements for one property, with their P580/P582 qualifiers."""
+        """Statements for one property, with their P580/P582/P585 qualifiers."""
         request = {"qid": qid, "lang": self.lang}
         payload = self._cached(
             "entity",
@@ -194,6 +205,8 @@ class WikidataClient:
                     start_time=_qualifier_time(quals, P_START_TIME),
                     end_time=_qualifier_time(quals, P_END_TIME),
                     rank=statement.get("rank", "normal"),
+                    point_in_time=_qualifier_time(quals, P_POINT_IN_TIME),
+                    qualifier_times=_all_qualifier_times(quals),
                 )
             )
         return out
@@ -243,6 +256,23 @@ def _qualifier_time(qualifiers: dict[str, Any], prop: str) -> str | None:
         if isinstance(value, dict) and "time" in value:
             return value["time"]
     return None
+
+
+def _all_qualifier_times(qualifiers: dict[str, Any]) -> dict[str, str]:
+    """Every TIME-valued qualifier on one statement, keyed by property id.
+
+    Wikidata carries dates on qualifiers other than P580/P582/P585 — P574
+    ("year of publication of taxon name") sits on P225, for instance — and a
+    per-property reader would have to be added for each. Collecting them once
+    means a new qualifier needs no new field, only a check that names it.
+    """
+    out: dict[str, str] = {}
+    for prop, snaks in qualifiers.items():
+        for snak in snaks:
+            value = snak.get("datavalue", {}).get("value", {})
+            if isinstance(value, dict) and "time" in value:
+                out.setdefault(prop, value["time"])
+    return out
 
 
 def parse_wikidata_time(value: str | None) -> dt.date | None:

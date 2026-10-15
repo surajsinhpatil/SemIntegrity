@@ -2,6 +2,11 @@
 """READ-ONLY diagnostic: why did Stage 0 label each response the way it did?
 
     python scripts/analysis/inspect_stage0.py --raw results/raw/pilot/qwen25-3b.jsonl
+    python scripts/analysis/inspect_stage0.py \
+        --raw results/raw/primary_trackA/mistral7b-v03.jsonl --split test
+
+`--split` DEFAULTS TO pilot. A primary run is in the `test` split and will
+report every constraint id as unknown unless --split test is passed.
 
 The pilot's CANON go/no-go criterion (configs/inference/pilot.yaml) requires
 Stage 0 to canonicalise >= 95% of valid responses. The first cluster pilot came
@@ -54,7 +59,9 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         print(f"ERROR: {len(unknown)} constraint id(s) are not in the '{args.split}' "
               f"split: {unknown[:5]}")
-        print("The smoke file uses synthetic K-*-99 ids; point --raw at a pilot run.")
+        print("--split defaults to 'pilot'. A primary run needs --split test:")
+        print(f"  python scripts/analysis/inspect_stage0.py --raw {args.raw} --split test")
+        print("(A smoke file instead uses synthetic K-*-99 ids and matches no split.)")
         return 2
 
     labels: Counter[str] = Counter()
@@ -119,4 +126,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # `inspect_stage0.py ... | head -60` closes the pipe early; without this the
+    # script dies with BrokenPipeError after printing perfectly good output.
+    # Same family as the `ldd | head -1` trap recorded in _common.sh.
+    import contextlib
+    import signal
+
+    with contextlib.suppress(AttributeError, ValueError):   # non-POSIX
+        signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     raise SystemExit(main())

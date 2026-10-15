@@ -148,3 +148,139 @@ def test_jit_caches_are_node_local_and_never_on_nfs():
     assert "rm -rf" in common and "semint-jit-" in common, (
         "per-job JIT scratch is never cleaned up; /tmp will fill on shared nodes"
     )
+
+
+# --- referenced script paths must EXIST (2026-10-14) ----------------------
+# docs/CLUSTER_RUNBOOK.md told the researcher to run
+# `bash scripts/env/cache_weights.sh --model <name>`. That path does not exist
+# (scripts/env/ holds only .gitkeep) and the flag form was wrong too: the real
+# script is scripts/models/cache_weights.sh with a POSITIONAL short name.
+# Following the runbook staged nothing, and jobs 13032/13033 spent 8 h queued
+# and two slots to discover it at preflight. A runbook command that cannot run
+# is worse than no runbook, so the paths are now checked.
+_SCRIPT_REF = re.compile(r"(?:bash|python3?)\s+((?:scripts|slurm)/[\w./-]+\.(?:sh|py|sbatch))")
+_ROOT = project_root()
+
+
+def _referenced_scripts(text: str) -> set[str]:
+    return set(_SCRIPT_REF.findall(text))
+
+
+def test_every_script_path_referenced_in_the_runbook_exists():
+    runbook = _ROOT / "docs" / "CLUSTER_RUNBOOK.md"
+    missing = sorted(
+        ref for ref in _referenced_scripts(runbook.read_text())
+        if not (_ROOT / ref).is_file()
+    )
+    assert not missing, (
+        f"docs/CLUSTER_RUNBOOK.md tells the researcher to run script(s) that do "
+        f"not exist: {missing}. A command in the runbook is executed on a cluster "
+        f"where a wrong path costs a queue slot."
+    )
+
+
+def test_every_script_path_referenced_in_an_sbatch_file_exists():
+    missing: dict[str, list[str]] = {}
+    for sbatch in sorted((_ROOT / "slurm").glob("*.sbatch")):
+        absent = sorted(
+            ref for ref in _referenced_scripts(sbatch.read_text())
+            if not (_ROOT / ref).is_file()
+        )
+        if absent:
+            missing[sbatch.name] = absent
+    assert not missing, f"sbatch scripts invoke non-existent paths: {missing}"
+
+
+def test_the_staging_script_is_where_the_abort_message_says_it_is():
+    """verify_cache.py's failure message names the recovery command."""
+    named = (_ROOT / "scripts" / "models" / "verify_cache.py").read_text()
+    assert "scripts/models/cache_weights.sh" in named
+    assert (_ROOT / "scripts" / "models" / "cache_weights.sh").is_file()
+
+
+def test_staging_verifies_itself_so_success_is_a_checked_claim():
+    """A half-populated cache must fail on the login node, not in a GPU job."""
+    staging = (_ROOT / "scripts" / "models" / "cache_weights.sh").read_text()
+    assert "verify_cache.py" in staging, (
+        "cache_weights.sh must end by running the offline verifier; otherwise it "
+        "can report success having fetched only metadata — which is how "
+        "qwen25-7b reached a compute node with 0 weight shards."
+    )
+
+
+def test_staging_checks_free_space_before_downloading():
+    staging = (_ROOT / "scripts" / "models" / "cache_weights.sh").read_text()
+    assert "weights_bf16_gb_estimate" in staging
+    download_at = staging.index("snapshot_download(")
+    space_at = staging.index("AVAIL_GB")
+    assert space_at < download_at, "the space check must run BEFORE the download"
+
+
+def test_space_preflight_consults_the_user_quota_not_just_df():
+    """df sees the filesystem; the binding limit here is the per-user quota.
+
+    Observed 2026-10-14: df reported 15T free on /nfs_home while `quota` showed
+    955G of a 1000G hard limit. A df-only check waves through a download that
+    cannot complete, which is how qwen25-7b/14b reached a compute node with 0
+    weight shards.
+    """
+    staging = (_ROOT / "scripts" / "models" / "cache_weights.sh").read_text()
+    assert "quota" in staging, "the preflight must consult the user quota"
+    assert "QUOTA_GB" in staging and "DF_GB" in staging
+    # and it must take the SMALLER of the two, never the rosier one
+    assert "QUOTA_GB < AVAIL_GB" in staging
+
+
+def test_primary_job_requests_at_least_64g_because_vllm_vsz_is_the_binding_size():
+    """--mem stays at the proven 64G floor.
+
+    The ORIGINAL rationale here was that --mem bounds virtual memory. That was
+    disproven on 2026-10-15: job 15060 (mistral7b-v03) recorded MaxVMSize of
+    98.3 GiB and COMPLETED under a 64G request, so --mem does not cap VSZ on
+    this cluster. The 32G failure of job 14935 was GPU contention, not memory.
+
+    The floor is kept anyway, on better grounds: 64G is the documented plan and
+    three models have completed under it, while measured RSS is only 3-4 GiB, so
+    there is no benefit to trimming it. The scheduling constraint on this
+    cluster is the account's cpu=64 cap, not memory -- lowering --mem buys
+    nothing and re-opens a variable that is currently settled.
+    """
+    text = (_ROOT / "slurm" / "30_primary_one_model.sbatch").read_text()
+    m = re.search(r"^#SBATCH --mem=(\d+)G", text, re.MULTILINE)
+    assert m, "the primary job must state an explicit --mem"
+    assert int(m.group(1)) >= 64, (
+        f"--mem={m.group(1)}G is below the 64G floor. vLLM needed >30 GiB of "
+        "VIRTUAL memory for a 3B model; lowering this on MaxRSS reasoning caused "
+        "job 14935 to die at cudaGetDeviceCount with 'out of memory'."
+    )
+
+
+def test_provenance_capture_cannot_abort_a_job():
+    """Recording the GPU is diagnostics; failing to record it must not be fatal.
+
+    csis.mn1 ships an nvidia-smi WRAPPER that prints "GPU ACCESS RESTRICTED" and
+    exits non-zero even inside a Slurm job with a real allocation. The preamble
+    ran `command -v nvidia-smi && nvidia-smi ...`, whose non-zero status under
+    `set -e` killed job 14962 two seconds in, before any preflight.
+    """
+    common = (_ROOT / "slurm" / "templates" / "_common.sh").read_text()
+    idx = common.index("nvidia-smi --query-gpu")
+    window = common[idx:idx + 400]
+    assert "||" in window, (
+        "the nvidia-smi call in job_provenance must tolerate a non-zero exit; "
+        "a restricted node otherwise kills the job during provenance capture"
+    )
+
+
+def test_staging_bounds_download_concurrency_for_a_shared_login_node():
+    """Staging qwen25-14b aborted with a Rust allocator OOM on the login node.
+
+    `memory allocation of 66713827 bytes failed ... Aborted (core dumped)` —
+    the hf_xet backend fetching up to 8 multi-GB shards concurrently exhausted
+    a machine shared with every other user. The 3B and 7B were small enough to
+    survive the default; the 14B was not.
+    """
+    staging = (_ROOT / "scripts" / "models" / "cache_weights.sh").read_text()
+    assert "HF_HUB_DISABLE_XET" in staging, "the Rust xet backend must be disabled"
+    assert "max_workers=" in staging, "snapshot_download must bound its concurrency"
+    assert "HF_MAX_WORKERS" in staging

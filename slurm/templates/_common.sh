@@ -128,7 +128,16 @@ job_provenance() {
   echo "start_utc     : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "git_commit    : $(git -C "$SEMINT_ROOT" rev-parse HEAD 2>/dev/null || echo 'not-a-git-repo')"
   echo "git_dirty     : $(git -C "$SEMINT_ROOT" status --porcelain 2>/dev/null | wc -l) files"
-  command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+  # NEVER let provenance capture kill the job. csis.mn1 ships an nvidia-smi
+  # WRAPPER that prints "GPU ACCESS RESTRICTED" and exits non-zero even inside a
+  # Slurm job holding a real allocation. Unguarded, `cmd -v x && x` returns that
+  # non-zero status, `set -e` aborts, and job 14962 died in 2 s having produced
+  # nothing but a provenance block. Recording the GPU is diagnostics; failing to
+  # record it must never be fatal.
+  if command -v nvidia-smi >/dev/null; then
+    nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader \
+      || echo "nvidia-smi present but refused (site wrapper or restricted node)"
+  fi
   python3 -c 'import sys; print("python        :", sys.version.split()[0])' 2>/dev/null || true
   echo "==============================================================="
 }

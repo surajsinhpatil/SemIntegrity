@@ -64,8 +64,8 @@ def test_deep_merge_does_not_mutate_its_inputs():
 
 
 def test_later_files_win_and_sources_are_recorded():
-    snap = model_config("gemma2-9b")
-    assert snap.data["model_id"] == "google/gemma-2-9b-it"
+    snap = model_config("qwen25-7b")
+    assert snap.data["model_id"] == "Qwen/Qwen2.5-7B-Instruct"
     assert snap.data["dtype"] == "bfloat16"  # inherited from _defaults
     assert snap.data["generation"]["temperature"] == 0.0  # inherited
     assert len(snap.sources) == 2
@@ -73,16 +73,29 @@ def test_later_files_win_and_sources_are_recorded():
 
 
 def test_per_model_file_overrides_a_default():
-    """gemma2-9b sets tensor_parallel_size itself; llama33-70b overrides it to 2."""
-    assert model_config("gemma2-9b").data["serving"]["tensor_parallel_size"] == 1
-    assert model_config("llama33-70b").data["serving"]["tensor_parallel_size"] == 2
+    """Every roster model sets tensor_parallel_size itself.
+
+    llama33-70b used to be the tp=2 case; it was retired 2026-10-15 (141 GB of
+    weights against ~52 GB of quota). Its config survives under
+    configs/models/retired/ and still declares tp=2, which is asserted here so
+    the override path stays covered.
+    """
+    import yaml
+
+    from semintegrity.utils.paths import project_root
+
+    assert model_config("qwen25-14b").data["serving"]["tensor_parallel_size"] == 1
+    retired = yaml.safe_load(
+        (project_root() / "configs/models/retired/llama33-70b.yaml").read_text()
+    )
+    assert retired["serving"]["tensor_parallel_size"] == 2
 
 
 def test_resolve_model_config_checks_required_keys_for_every_model():
     from semintegrity.utils.config import REQUIRED_MODEL_KEYS, resolve_model_config
 
-    for name in ("llama31-8b", "mistral7b-v03", "qwen25-7b", "gemma2-9b",
-                 "qwen25-3b", "qwen25-14b", "llama33-70b"):
+    for name in ("qwen25-3b", "qwen25-7b", "qwen25-14b", "mistral7b-v03",
+                 "olmo2-7b"):
         snap = resolve_model_config(name)
         assert set(snap.data) >= REQUIRED_MODEL_KEYS
         assert snap.data["dtype"] == "bfloat16"

@@ -42,11 +42,41 @@ def main() -> int:
         return 2
     name = sys.argv[1]
 
-    cfg_path = ROOT / "configs" / "models" / f"{name}.yaml"
-    if not cfg_path.is_file():
-        print(f"no such model config: {cfg_path}", file=sys.stderr)
-        return 1
-    cfg = yaml.safe_load(cfg_path.read_text())
+    # The D3 judges are NOT roster models: they live nested in _judge.yaml so
+    # they do not inflate the roster count the readiness audit checks. Address
+    # them as `judge:primary_judge` / `judge:reproducibility_judge`.
+    if name.startswith("judge:"):
+        role = name.split(":", 1)[1]
+        cfg_path = ROOT / "configs" / "models" / "_judge.yaml"
+        whole = yaml.safe_load(cfg_path.read_text())
+        if role not in whole:
+            roles = [k for k, v in whole.items() if isinstance(v, dict) and "model_id" in v]
+            print(f"no judge role {role!r} in {cfg_path}; known: {roles}", file=sys.stderr)
+            return 1
+        cfg = whole[role]
+    # D2's NLI checkpoint is likewise not a roster model: it lives in
+    # configs/detectors/d2_nli.yaml under DIFFERENT keys
+    # (checkpoint_selection.selected / .revision), so it is normalised here.
+    # Address it as `detector:d2`.
+    elif name.startswith("detector:"):
+        which = name.split(":", 1)[1]
+        known = {"d2": ("configs/detectors/d2_nli.yaml", "checkpoint_selection")}
+        if which not in known:
+            print(f"unknown detector {which!r}; known: {sorted(known)}", file=sys.stderr)
+            return 1
+        rel, key = known[which]
+        cfg_path = ROOT / rel
+        block = (yaml.safe_load(cfg_path.read_text()).get(key) or {})
+        if not block.get("selected"):
+            print(f"{key}.selected is empty in {cfg_path}", file=sys.stderr)
+            return 1
+        cfg = {"model_id": block["selected"], "revision": block.get("revision")}
+    else:
+        cfg_path = ROOT / "configs" / "models" / f"{name}.yaml"
+        if not cfg_path.is_file():
+            print(f"no such model config: {cfg_path}", file=sys.stderr)
+            return 1
+        cfg = yaml.safe_load(cfg_path.read_text())
     model_id = cfg["model_id"]
     revision = str(cfg.get("revision") or "")
 

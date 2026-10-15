@@ -86,7 +86,9 @@ gpus:
   implication: >-
     80 GB per GPU is ample: every model up to 14B fits on ONE A100 in bf16 with
     room for KV cache. Llama-3.3-70B at ~141 GB needs 2 GPUs (tensor_parallel_size=2),
-    which fits within the account's gres/gpu=3 limit.
+    which is EXACTLY the account's gres/gpu=2 limit (re-observed 2026-10-14, see
+    account_limits) — so the 70B consumes the whole account's GPU allowance and
+    can share the cluster with no other GPU job of ours.
   bf16_supported: true          # A100 — confirmed by hardware class; re-asserted in the env test
   driver_version: "570.158.01"  # observed on csis.cn4
   cuda_runtime_supported: "12.8"
@@ -102,15 +104,33 @@ gpus:
 storage:
   status: PROBED
   filesystem: "/dev/sdb1 mounted at /nfs_home (24 TB, 31% used)"
-  quota_used_gb: 713          # re-measured 2026-09-25; was 687, labmates are consuming it
+  quota_used_gb: 955          # RE-MEASURED 2026-10-14. Was 713 on 2026-09-25 and
+                              # 687 before that: consumption is RISING ~120 GB/mo.
   quota_soft_gb: 999
   quota_hard_gb: 1000
-  headroom_gb: 286            # 713 of 1000 GB hard limit, SHARED across the account
+  headroom_gb: 45             # 955 of 1000 GB hard limit. NOT 286 any more.
+  model_cache_gb: 17          # hf_cache holds only 17 GB of the 955 (14B 1.9 +
+                              # 3B 0.012 + 7B 15), so ~938 GB is something else
+                              # and has never been accounted for. Find it before
+                              # planning any further staging.
+  df_is_misleading: >-
+    `df -h /nfs_home` reports 15 T available and is IRRELEVANT: the per-USER
+    quota binds at 1000 GB and is the thing that stops a download. A df-based
+    free-space check passes while the download fails. scripts/models/
+    cache_weights.sh now reads `quota` and takes the SMALLER of the two.
   quota_is_shared: true
   quota_warning: >-
-    The 713 GB already used belongs to the WHOLE shared account: ~286 GB of
-    headroom against a 1 TB hard limit, re-measured 2026-09-25. All seven models
-    in bf16 are ~244 GB, so they fit only on paper — that would leave ~42 GB for
+    RE-MEASURED 2026-10-14: 955 GB used, ~45 GB of headroom. All seven models in
+    bf16 are ~244 GB, so they NO LONGER FIT EVEN ON PAPER. One-at-a-time staging
+    with eviction is now mandatory rather than merely advisable, and
+    llama33-70b alone needs 141 GB — more than the 45 GB free plus the 17 GB of
+    evictable cache combined, so ~100 GB must be freed elsewhere before the 70B
+    can be staged at all. This is the live form of the readiness audit's
+    standing storage FAIL.
+    The older note read: The 713 GB already used belongs to the WHOLE shared
+    account: ~286 GB of headroom against a 1 TB hard limit, re-measured
+    2026-09-25. All seven models in bf16 are ~244 GB, so they fit only on paper
+    — that would leave ~42 GB for
     everyone else on the account and risk hitting the hard limit mid-run. STAGE
     models one at a time and EVICT; never cache all seven at once. Note `df`
     reports 16 TB free on /nfs_home, which is the filesystem, not the limit that
@@ -298,8 +318,14 @@ account_limits:
   account: faculty
   GrpTRES:
     cpu: 64
-    gres_gpu: 3
+    gres_gpu: 2          # RE-OBSERVED 2026-10-14: was recorded as 3 on 2026-09-25.
+                         # `sacctmgr -P show association where user=yashsinha`
+                         # returns cpu=64,gres/gpu=2,mem=128G. The limit TIGHTENED;
+                         # anything sized against 3 GPUs is wrong.
     mem: 128G
+  MaxTRES:
+    gres_gpu: 2          # per-JOB ceiling, same value. tp=2 is therefore the
+                         # largest parallelism this account can ever request.
   MaxJobs: 5
   qos_listed: [cpu-short, debug]
   fairshare: {raw_shares: 1, norm_shares: 0.0526, fairshare_factor: 0.1905}
@@ -310,9 +336,53 @@ account_limits:
     MaxJobs=5 is 5 jobs for everyone, not 5 each. Coordinate before launching
     anything large, and prefer array jobs throttled with `%N`.
 
+  unusable_nodes:
+    csis.mn1:
+      status: DO_NOT_TARGET        # observed 2026-10-15, job 14962
+      symptom: >-
+        Ships an nvidia-smi WRAPPER that prints "GPU ACCESS RESTRICTED / Please
+        use Slurm for GPU-based job executions!" and exits non-zero EVEN INSIDE
+        a Slurm job holding a real allocation (gpus_on_node=1,
+        CUDA_VISIBLE_DEVICES=0). Killed the job in 2 s during provenance
+        capture, before any preflight.
+      why_it_looks_attractive: >-
+        It is the only node sinfo ever reports as `idle` with both A100s free,
+        precisely BECAUSE nobody can use it. Do not read that idleness as
+        availability.
+      note: "`_common.sh` now guards nvidia-smi so this can no longer be fatal, but the node still cannot run GPU work."
+    csis.cn2:
+      status: DO_NOT_TARGET
+      symptom: "State=drained (observed 2026-10-15); 0/0/128 CPUs, unavailable."
+
+  gpu_contention_hazard:
+    status: OBSERVED              # 2026-10-15, jobs 14935 and 14956
+    symptom: >-
+      torch._C._cuda_init() -> "RuntimeError: Unexpected error from
+      cudaGetDeviceCount()... Error 2: out of memory", raised at MODULE IMPORT
+      time inside vllm/v1/attention/backends/flash_attn.py, ~30-48 s in, before
+      any weight is read.
+    not_the_cause: >-
+      NOT the --mem request. Reproduced identically at 32G and 64G, with MaxRSS
+      of 1.1 MB and 1.6 GiB respectively -- orders of magnitude below either
+      ceiling. Sizing --mem on MaxRSS was a separate, now-corrected mistake.
+    likely_cause: >-
+      ConstrainDevices=no on this cluster, so cgroups do NOT fence GPUs between
+      jobs. A co-tenant process holding the allocated A100 leaves too little
+      memory for CUDA to create a context, and gpu_memory_utilization=0.90 needs
+      ~90% of the card free.
+    mitigation: >-
+      slurm/30_primary_one_model.sbatch preflight 0 now runs nvidia-smi, records
+      which processes are on the card, and refuses with exit 9 when less than 80%
+      of GPU memory is free. The run is not spent, and the log says how full the
+      card was -- without that, a failure cannot be diagnosed after the fact.
+
   hard_consequences:
     - "mem must never exceed 128G in any single request — the earlier 256G plan for the 70B was impossible"
-    - "at most 3 GPUs total, so Llama-3.3-70B at tp=2 works but leaves 1 GPU for everyone else"
+    - "mem is an AGGREGATE limit across the whole faculty account. Two 64G jobs
+       sum to exactly 128G and leave nothing for anyone else; that is why jobs
+       13032/13033 pended 8 h with Reason=AssocGrpMemLimit on 2026-10-08."
+    - "at most 2 GPUs total (not 3). Llama-3.3-70B at tp=2 uses the ENTIRE account
+       GPU allowance, so no other GPU job of ours can run beside it."
     - "cpus-per-task summed across running jobs must stay under 64"
 
   qos_gpu_access:
@@ -324,21 +394,52 @@ account_limits:
 
 resource_plan:     # sized against the REAL limits above
   small_models:    # <= 14B, bf16, tp=1 — one A100 80GB is ample
-    models: [qwen25-3b, mistral7b-v03, qwen25-7b, llama31-8b, gemma2-9b, qwen25-14b]
+    models: [qwen25-3b, qwen25-7b, qwen25-14b, mistral7b-v03, olmo2-7b]
+    # ROSTER REDUCED 2026-10-15; retired configs in configs/models/retired/.
     partition: gpu-short          # 8 h limit; plenty for a pilot
     gpus: 1
     gres: "gpu:a100-80gb:1"
-    cpus_per_task: 8
-    mem: 64G
-    time: "04:00:00"
-  ceiling_model:   # 70B bf16 ~141 GB -> 2 x A100 80GB
+    cpus_per_task: 4              # 8 -> 4 on 2026-10-15. GrpTRES cpu=64 is an
+                                  # AGGREGATE account cap and job 14958 sat at
+                                  # (AssocGrpCpuLimit) behind ~80 co-tenant array
+                                  # jobs. Inference is GPU-bound and decoding is
+                                  # greedy, so CPU count changes speed, not tokens.
+    time: "01:30:00"              # 06:00 -> 01:30. Job 13023 ran all 960 primary
+                                  # probes on a 3B in 00:01:47; a 6 h reservation
+                                  # cannot backfill where a 90 min one can.
+    mem: 64G                      # MEASURED 2026-10-15 across three COMPLETED runs:
+                                  #   3B  MaxRSS 2.64 GiB / VSZ 30.5 GiB
+                                  #   7B  MaxRSS 4.16 GiB / VSZ 39.6 GiB
+                                  #   mistral MaxRSS 3.18 GiB / VSZ 98.3 GiB
+                                  # The last row is decisive: 98 GiB of VIRTUAL
+                                  # memory COMPLETED under a 64G request, so --mem
+                                  # does NOT cap VSZ here. An earlier note claimed
+                                  # it did and blamed the 32G failure of job 14935
+                                  # on it; that was WRONG -- the cause was GPU
+                                  # contention (see gpu_contention_hazard). RSS is
+                                  # the binding quantity and is only 3-4 GiB, so
+                                  # 64G is generous headroom, retained because it
+                                  # is proven rather than because it is required.
+  ceiling_model:   # RETIRED 2026-10-15 -- kept for the record only.
+    # llama33-70b needs 141 GB of weights against ~52 GB of usable quota on a
+    # SHARED 1 TB account, so it could never be staged. Dropping it narrows the
+    # within-family scale axis from 3B-70B (23x) to 3B-14B (4.7x); the study can
+    # say nothing about frontier scale and must state that explicitly.
+    status: RETIRED
     models: [llama33-70b]
     partition: gpu-1day           # 24 h limit
     gpus: 2
     gres: "gpu:a100-80gb:2"
     tensor_parallel_size: 2
     cpus_per_task: 16
-    mem: 120G                     # CORRECTED from 256G — the group cap is 128G
+    mem: 120G                     # CORRECTED from 256G — the group cap is 128G.
+                                  # STILL UNMEASURED and almost certainly far too
+                                  # high: 120G of a 128G shared pool means the 70B
+                                  # can never run beside anything. RE-DERIVE from
+                                  # the qwen25-14b MaxRSS before submitting it;
+                                  # tp=2 roughly doubles host RSS, so ~48G is the
+                                  # expected order, not 120G. Not changed here
+                                  # because nothing has measured it yet.
     time: "12:00:00"
   nli_d2:
     partition: gpu-short

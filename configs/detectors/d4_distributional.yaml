@@ -12,12 +12,31 @@ method:
   candidate_set: "the constraint's known closed answer set"
   scoring: teacher_forced_sequence_logprob
   length_normalisation: per_token_log_probability   # raw sequence probs are length-biased
-  # UNRESOLVED (Q5): length-normalised log-probs are not a probability
-  # distribution. The mapping to one must be pre-registered and frozen.
+  # RESOLVED 2026-10-15 by ADR-0024 (supersedes ADR-0016; Q5 RESOLVED).
+  # Length-normalised log-probs are not a probability distribution, so the
+  # mapping is preregistered and frozen here.
   distribution_construction:
-    status: UNRESOLVED
-    proposed: "p_i = softmax_i(mean_token_logprob_i) over the candidate set"
-    alternatives: ["renormalise exp(sum_logprob_i)", "renormalise exp(mean_logprob_i / T) with frozen T"]
+    status: RESOLVED
+    decided_by: ADR-0024
+    decided_on: 2026-10-15
+    formula: "p_i = softmax_i(mean_token_logprob_i / T) over the candidate set"
+    temperature: 1.0                 # PRIMARY, FROZEN before any test evaluation
+    temperature_rationale: >-
+      T = 1 is the only value §4.8.6's text determines: it requires length
+      normalisation to per-token log-probability and mentions no temperature.
+      Every other value is a free parameter, and tuning a free parameter
+      without reference labels is not justifiable.
+    sensitivity_band: [0.5, 1.0, 2.0, 4.0]   # EXPLORATORY, reported alongside
+    cross_temperature_magnitude_comparison: forbidden
+    note: >-
+      A JSD value is interpretable ONLY against other values computed under the
+      SAME T. Lower T sharpens the distribution and raises JSD; the existing
+      test in tests/unit/test_d4_distributional.py demonstrates this on
+      identical log-probabilities and is why the band is reported rather than
+      hidden.
+    rejected_alternatives:
+      - {option: "renormalise exp(sum_logprob_i)", why: "drops the length normalisation §4.8.6 requires"}
+      - {option: "fit T on the dev split", why: "adds a tuned quantity to the preregistration of an exploratory analysis; 'neither degenerate nor uniform' is itself a researcher choice"}
   divergence: jensen_shannon
   aggregation: mean_pairwise_JSD_within_constraint
 

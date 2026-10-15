@@ -3,14 +3,54 @@ id: D2
 role: "Automated semantic contradiction signal"
 degrades_with_class: true                    # measured, not assumed
 
+# REDESIGNED 2026-10-15 by ADR-0023 D6. D2 no longer produces a VERDICT,
+# because its per-class threshold was calibrated on human-labelled dev data and
+# no such data exists or will exist. It reports a CONTINUOUS SCORE only.
+estimand:
+  status: REDESIGNED
+  decided_by: ADR-0023
+  reports: continuous_contradiction_score_per_pair
+  produces_verdict: false
+  contributes_to_pscr: false
+  contributes_to_h1: false
+  contributes_to_agreement_table: false
+  why_retained: >-
+    D0, D1 and D3 all reduce to comparing answer slots (measured D0-vs-D1 pair
+    agreement is 1.0000). D2 is the ONLY detector whose mechanism is not
+    answer-identity, so it is the only instrument that could disagree for an
+    interesting reason. See ADR-0023 §1.1.
+
 checkpoint_selection:
-  status: EMPIRICAL_NOT_ASSUMED
-  selected: null                             # chosen on DEV split, then frozen
-  selection_criterion: "best AUPRC against human-labelled dev contradiction pairs"
-  candidates:
-    mnli_only:    ["roberta-large-mnli", "microsoft/deberta-large-mnli"]
-    multi_corpus: ["MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli",
-                   "ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli"]
+  # Selecting AMONG checkpoints requires labelled dev data, so no selection is
+  # performed. ONE checkpoint is fixed a priori and pinned. Declaring this
+  # removes the leakage concern: there is nothing tuned, so nothing can leak.
+  status: FIXED_A_PRIORI_NO_SELECTION
+  selected: MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli
+  # PINNED 2026-10-15 from the Hub's own metadata (HfApi.model_info) on the Mac.
+  # No inference was run to obtain it: §4.5 needs the revision, and the revision
+  # is repository metadata.
+  revision: b3546ea6b0346eb6f8d5d68b13c7dc6d0376b3d7
+  revision_pinned_at: 2026-10-15
+  revision_source: "huggingface_hub.HfApi().model_info(...).sha"
+  # MEASURED from the Hub at the pinned revision. The repo totals 4.14 GB
+  # because it carries three redundant weight copies (pytorch_model.bin,
+  # model.safetensors, onnx/model_quantized.onnx); cache_weights.sh's
+  # allow_patterns take only safetensors + tokenizer, so the real
+  # footprint is ~0.88 GB. Stated for the disk-quota preflight, which
+  # matters on a 1000 G hard limit that is ~976 G consumed.
+  weights_gb_estimate: 1
+  repo_total_gb: 4.14
+  download_gb_with_allow_patterns: 0.88
+  selection_criterion: null                  # WITHDRAWN — was "best AUPRC against human-labelled dev pairs"
+  selection_performed: false
+  rationale: >-
+    Chosen a priori for breadth of NLI training corpora (MNLI + FEVER + ANLI +
+    LingNLI + WANLI), which suits claims rendered from a knowledge base rather
+    than one corpus's register. NO comparison against the other candidates was
+    performed and none is claimed.
+  not_compared_against:
+    ["roberta-large-mnli", "microsoft/deberta-large-mnli",
+     "ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli"]
   rule: "no candidate is presumed better on model-card or leaderboard figures"
 
 input:
@@ -23,10 +63,65 @@ scoring:
   bidirectional: true                        # NLI is asymmetric
   aggregate: max_contradiction_probability
 
+  # --- the complete inference configuration, fixed before any run ---------
+  # READ FROM config.json AT THE PINNED REVISION, not assumed. Getting this
+  # wrong inverts the score silently: if `contradiction` were index 0 and the
+  # code read index 2, every pair's score would be its entailment probability.
+  label_order: {0: entailment, 1: neutral, 2: contradiction}
+  contradiction_index: 2
+  architecture: DebertaV2ForSequenceClassification
+  num_labels: 3
+  max_position_embeddings: 512
+  score_definition: >-
+    For an unordered pair of rendered claims (A, B), run the model twice —
+    premise=A/hypothesis=B and premise=B/hypothesis=A — take softmax over the
+    3 logits of each direction, and report
+    max(P_AB[contradiction], P_BA[contradiction]).
+    `max` because NLI is asymmetric and a contradiction detected in either
+    direction is a contradiction; the pair is unordered, so a direction-
+    dependent score would make the value depend on iteration order.
+  score_range: "[0, 1]"
+  produces_verdict: false                    # there is no threshold (see below)
+  inference:
+    dtype: float32                           # a 435M-param classifier; no bf16 needed
+    batch_size: 32
+    max_length: 512                          # the model's own limit
+    truncation: longest_first
+    device: cuda
+    deterministic: true                      # argmax-free; softmax of fixed logits
+    seed: 20250058                           # recorded for provenance; no sampling occurs
+  input_source: >-
+    semintegrity.detectors.d2.templates.render_claim, the SAME renderer D3
+    uses. A pair where either response renders no claim is skipped, exactly as
+    in D1 and D3, so D2's coverage set is identical to theirs.
+
 threshold:
-  default_0_5_forbidden: true                # "A bare 0.5 threshold is never used."
-  calibrated: per_class
-  calibrated_on: development_split
-  frozen_before: test_evaluation
-  values: null                               # populated by scripts/detectors/calibrate_d2.py
+  # WITHDRAWN by ADR-0023 D6. There is no threshold, because there is no
+  # verdict. Inventing one without labels was considered and REJECTED: it would
+  # be arbitrary, and d2_nli.yaml has always forbidden a bare 0.5 precisely to
+  # stop that. `check_pair` keeps raising ThresholdNotCalibrated.
+  status: WITHDRAWN
+  withdrawn_by: ADR-0023
+  default_0_5_forbidden: true                # unchanged and still enforced in code
+  calibrated: null
+  calibrated_on: null                        # was: development_split (human labels)
+  values: null
   frozen_at: null
+
+rank_concordance:
+  # What D2 reports INSTEAD of a verdict. Implemented in
+  # semintegrity.analysis.rank_concordance, deliberately NOT in
+  # analysis.detector_scores, whose require_human_gold guard stays in force so
+  # that a concordance figure can never print under an accuracy heading.
+  estimand: >-
+    P(score of a pair the reference detector called VIOLATION > score of a pair
+    it called SATISFIED), ties counted as 1/2 — the Mann-Whitney / AUC
+    statistic, computed against a DETECTOR partition, never against gold.
+  reference_partitions: [D1, D3]
+  unit: constraint                           # pair-level pooling is a point estimate only
+  is_accuracy: false
+  interpretation_limit: >-
+    The reference detector is not ground truth. A value near 1 means D2 orders
+    pairs the way that detector partitions them; it does NOT mean either is
+    correct. Both may share the bias induced by rendering claims from canonical
+    answers.

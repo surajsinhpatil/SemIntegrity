@@ -11,14 +11,56 @@ probes_per_constraint: 8
 models: [qwen25-3b, llama31-8b, gemma2-9b]   # smallest + one per other family; PENDING SIGNOFF (Q10)
 detectors: [D0, D1, D2, D3, D4]
 workload: { probes: 96, generations_per_model: 96, total_generations: 288 }
-go_no_go:                                      # fixed IN ADVANCE (§4.12)
-  - { id: GT,        criterion: ">= 95% of pilot constraints have unambiguous, sourceable ground truth" }
-  - { id: PROBE,     criterion: ">= 90% of candidate probes survive human semantic-equivalence validation" }
-  - { id: CANON,     criterion: "Stage 0 correctly canonicalises >= 95% of valid pilot responses" }
-  - { id: D0AUDIT,   criterion: "every D0 predicate passes its three-instance schema audit" }
-  - { id: NONDEGEN,  criterion: "D2 and D3 produce non-degenerate predictions (not all-contradiction, not all-compatible)" }
-  - { id: IAA,       criterion: "inter-annotator agreement on the pilot batch is acceptable" }
-  - { id: ABSTAIN,   criterion: "no class shows an abstention rate so dominant that cross-class comparison is meaningless" }
+# REVISED 2026-10-15 by ADR-0023 D1. The ORIGINAL preregistered wording is
+# retained verbatim under `superseded_go_no_go` below, so the preregistration
+# history stays traceable and no criterion is silently rewritten.
+go_no_go:                                      # fixed IN ADVANCE (§4.12), revised by ADR-0023
+  - { id: GT,        criterion: ">= 95% of pilot constraints have unambiguous, sourceable ground truth", status: RETAINED }
+  # Block style, not flow: this entry carries long prose and a `>-` block
+  # scalar is not valid inside a `{ }` flow mapping.
+  - id: PROBE-C
+    status: SUPERSEDES_PROBE
+    criterion: >-
+      probes are equivalent BY CONSTRUCTION: every logical_form matches its
+      constraint's schema, no two probes of a constraint share a surface, the
+      factor lattice is fully covered, and any probe tripping a
+      machine-detectable pathology check is QUANTIFIED with its effect on the
+      primary metric BOUNDED by a prespecified sensitivity analysis
+    criterion_revised_2026_10_15: >-
+      The first wording required ZERO pathology findings. That was never
+      achievable and was the wrong test: the benchmark is FROZEN, so a finding
+      cannot be fixed, and 43 of 960 probes are polar clozes whose statement
+      necessarily names the gold answer -- a property of the probe FORM, not a
+      defect in a probe. What matters scientifically is whether the finding
+      MOVES anything, so the criterion now requires the effect to be measured
+      and bounded rather than absent. Revising a gate after seeing data IS a
+      researcher degree of freedom and is recorded here as one.
+    satisfied_by: >-
+      43 of 960 probes flagged POLAR_CLOZE_STEM_EMBEDS_GOLD_ANSWER (factor
+      cells 04/06/07); effect bounded by S4 at paired PSCR differences of
+      0.002-0.007 across four models, one to two orders of magnitude below
+      H1_primary's 0.090-0.182, with mixed signs. See Q33 and
+      docs/RESULTS_STATUS.md section 4b.
+    limitation: >-
+      audits the GENERATOR, not the generated meaning. A systematically
+      mis-specified logical_form would pass. 'Validated' is not available as a
+      word for this result; 'constructed and machine-audited' is.
+  - { id: CANON,     criterion: "Stage 0 correctly canonicalises >= 95% of valid responses", status: RETAINED_AND_FROZEN }
+  - { id: D0AUDIT-A, criterion: "every registered D0 predicate passes analytic cases whose expected verdict follows DEDUCTIVELY from its declared formal_statement against a constructed KB fixture", status: RESPECIFIES_D0AUDIT,
+      limitation: "a software-correctness check, NOT detector validity and NOT human validation. It shows a predicate implements its own stated formalisation, not that the formalisation captures the constraint. All 24 used predicates delegate to one shared pairwise implementation, so it audits one mechanism reached by 24 names." }
+  - { id: NONDEGEN,  criterion: "D3 produces non-degenerate predictions (not all-contradiction, not all-compatible)", status: RESOLVED_AND_NARROWED,
+      resolution: "the label-distribution reading in THIS file governs; configs/models/_judge.yaml's 'judge-vs-human agreement' wording is a verification note, not a gate definition, and has been amended to match",
+      d2_removed_from_criterion: "D2 no longer produces predictions to be degenerate or otherwise (ADR-0023 D6)" }
+  - { id: ABSTAIN,   criterion: "no class shows an abstention rate so dominant that cross-class comparison is meaningless", status: RETAINED }
+removed_go_no_go:
+  - { id: IAA, criterion: "inter-annotator agreement on the pilot batch is acceptable", status: REMOVED,
+      why: "with no annotators there is no agreement to measure. NOT replaced by inter-detector agreement: D0 and D1 share their pairwise implementation, so their concordance is near-tautological (ADR-0023 D5)." }
+superseded_go_no_go:                           # ORIGINAL preregistered wording, retained for traceability
+  - { id: PROBE,   criterion: ">= 90% of candidate probes survive human semantic-equivalence validation", superseded_by: PROBE-C }
+  - { id: D0AUDIT, criterion: "every D0 predicate passes its three-instance schema audit", superseded_by: D0AUDIT-A,
+      note: "detectors/d0/audit.py required HUMAN-supplied expected verdicts: 'An audit case with no human-supplied verdict is rejected, not defaulted.'" }
+  - { id: NONDEGEN, criterion: "D2 and D3 produce non-degenerate predictions (not all-contradiction, not all-compatible)", superseded_by: NONDEGEN }
+  - { id: IAA,     criterion: "inter-annotator agreement on the pilot batch is acceptable", superseded_by: null }
 on_failure: "pipeline revision BEFORE the full benchmark is authored"
-note: "IAA threshold is qualitative in the proposal; a numeric value must be fixed at Phase 4 preregistration (Q11)"
+note: "Q11 (a numeric IAA threshold) is MOOT: IAA is removed by ADR-0023 D5."
 output: { format: jsonl, path: results/raw/pilot/, immutable: true }

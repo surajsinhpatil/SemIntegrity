@@ -1,0 +1,33 @@
+model_id: allenai/OLMo-2-1124-7B-Instruct
+short_name: olmo2-7b
+family: olmo
+params_b: 7
+role: "Cross-family comparison (AI2 lineage); replaces llama31-8b, 2026-10-15"
+# --- Pinning ---------------------------------------------------------------
+# UNPINNED ON PURPOSE. §4.5 requires a real 40-hex commit SHA resolved from the
+# Hub, and inventing one is worse than leaving it null: the readiness audit's
+# "model revisions pinned" check FAILS while this is null, which is the correct
+# state until it is resolved. Populate from the LOGIN node (needs network):
+#     python scripts/models/pin_revisions.py --write
+revision: 470b1fba1ae01581f270116362ee4aa1b97f4c84
+revision_pinned_at: 2026-10-15
+weights_bf16_gb_estimate: 15
+# --- Access ----------------------------------------------------------------
+gated_on_hf: false           # AI2 publishes OLMo-2 openly
+# --- Chat template ---------------------------------------------------------
+# ASSUMED from documentation and MUST be verified before the run. The runner
+# audits the real template at load time and records a discrepancy if the
+# declared value is wrong.
+supports_system_role: true
+system_merge_strategy: none
+chat_template_hash: null
+# --- Serving ---------------------------------------------------------------
+serving:
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.90
+  max_model_len: 2048
+# --- vLLM support ----------------------------------------------------------
+# VERIFIED 2026-10-15 on the cluster: vllm 0.11.2 ships
+# model_executor/models/olmo2.py, so Olmo2ForCausalLM is supported on the
+# glibc-2.28-pinned stack (ADR-0015). Checked by listing the installed package
+# rather than assumed from release notes.

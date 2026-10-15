@@ -27,20 +27,37 @@ primary_judge:
   verification_required:
     - "confirm the exact Hub id and that the repository resolves"
     - "pin the revision SHA before any judging run"
-    - "dev-split judge-vs-human agreement must be non-degenerate (pilot criterion NONDEGEN)"
+    # AMENDED 2026-10-15 by ADR-0023 D4. The original wording here read
+    # "dev-split judge-vs-human agreement must be non-degenerate", which
+    # CONFLICTED with the preregistered gate in configs/inference/pilot.yaml.
+    # pilot.yaml governs: NONDEGEN is a LABEL-DISTRIBUTION property and needs no
+    # human labels. SATISFIED on measured data for all four CANON-passing
+    # models (Qwen2.5-3B 1017:1308, and comparable splits for 7B/14B/OLMo-2).
+    - "judge label distribution must be non-degenerate: not all-contradiction, not all-compatible (pilot criterion NONDEGEN, as defined in configs/inference/pilot.yaml)"
 
 reproducibility_judge:        # second, independent open-weight family
-  model_id: allenai/OLMo-2-1124-13B-Instruct
-  family: olmo
-  revision: 3a5c85baefbb1896a54d56fe2e76c0395627ddf4
-  revision_pinned_at: 2026-09-11
+  # CHANGED 2026-10-15. Was allenai/OLMo-2-1124-13B-Instruct (pinned
+  # 3a5c85baefbb1896a54d56fe2e76c0395627ddf4). olmo2-7b entered the EVALUATED
+  # roster on the same day, so an OLMo-2 judge would have been scoring an OLMo-2
+  # model on the 15% subset -- same lineage, same Dolma pretraining corpus. That
+  # is precisely what the `disqualified` list below forbids, and it would have
+  # destroyed the externality this role exists to provide.
+  # Granite 3.x is the alternative ADR-0008 itself records; it is not invented
+  # here. D3 has never been executed, so nothing is invalidated by the swap.
+  model_id: ibm-granite/granite-3.1-8b-instruct
+  family: granite
+  revision: null              # UNPINNED: resolve from the LOGIN node before use
+  revision_pinned_at: null
   subset_fraction: 0.15
   rationale: >-
     §4.8.5 pairs the primary judge with a second judge on a stratified subset as
     a reproducibility check. With an open-weight PRIMARY judge this role becomes
     a CROSS-FAMILY AGREEMENT check rather than an open-vs-closed check; a second
     independent lineage preserves its purpose.
-  verification_required: ["confirm the exact Hub id", "pin the revision SHA"]
+  verification_required:
+    - "confirm the exact Hub id resolves (ibm-granite/granite-3.1-8b-instruct)"
+    - "pin the revision SHA before any judging run"
+    - "confirm vllm 0.11.2 supports GraniteForCausalLM, the way olmo2.py was checked"
 
 # --- LINEAGE CONTAMINATION TRAP --------------------------------------------
 # Several otherwise-attractive open-weight judges are DISQUALIFIED because they
@@ -48,6 +65,7 @@ reproducibility_judge:        # second, independent open-weight family
 # NOT the test; shared lineage is.
 disqualified:
   - { id: "DeepSeek-R1-Distill-Qwen-*",  reason: "Qwen base — inside an evaluated family" }
+  - { id: "allenai/OLMo-2-*",            reason: "OLMo-2 entered the EVALUATED roster 2026-10-15 (olmo2-7b); an OLMo-2 judge would share its lineage" }
   - { id: "DeepSeek-R1-Distill-Llama-*", reason: "Llama base — inside an evaluated family" }
   - { id: "nvidia/Llama-*-Nemotron-*",   reason: "Llama base — inside an evaluated family" }
   - { id: "any Qwen/Mistral/Gemma/Llama fine-tune", reason: "shared lineage with an evaluated model" }

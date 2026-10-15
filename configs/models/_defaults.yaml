@@ -34,7 +34,12 @@ generation:
 # A wheel's torch pin does NOT track its own CUDA linkage, and neither does its
 # dependency metadata: 0.20.0 and 0.21.0 declare no cu13 dependency yet their
 # extensions link libcudart.so.13. Only the binary is authoritative.
-# Pinned stack: vLLM 0.19.1 on torch 2.10.0+cu128, driver 570.158.01 = CUDA 12.8.
+# SUPERSEDED BY ADR-0015. The table above stops at 0.20.0 because it reads only
+# CUDA linkage; it ignores glibc. The cluster is glibc 2.28, and the 0.19.1 wheel
+# is manylinux_2_31, so ADR-0013's pin is UNINSTALLABLE here. The usable line is
+# manylinux1, 0.11.2 and below.
+# PINNED STACK (ADR-0015): vLLM 0.11.2 on torch 2.9.0+cu128, transformers 4.57.6,
+# Python 3.11.16, driver 570.158.01 = CUDA 12.8.
 #
 # Do NOT set this per model. A comparison across models is only interpretable if
 # the stack is identical for all of them. The MacBook development path

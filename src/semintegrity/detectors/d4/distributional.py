@@ -46,7 +46,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Protocol
+from typing import Any, Protocol
 
 #: Mirrors the config key. Any code that reads this and still builds a verdict
 #: is doing something the specification forbids.
@@ -212,3 +212,96 @@ class D4Distributional:
             max_pairwise_jsd=max(values) if values else None,
             pairwise=tuple(pairs), builder=self.builder.name, scorer=self.scorer.name,
         )
+
+
+# ---------------------------------------------------------------------------
+# ADR-0024 sensitivity band — a CPU transform, NOT four GPU runs
+# ---------------------------------------------------------------------------
+
+#: The preregistered primary temperature (ADR-0024, d4_distributional.yaml).
+PRIMARY_TEMPERATURE = 1.0
+
+#: The exploratory band reported alongside it.
+SENSITIVITY_TEMPERATURES: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0)
+
+
+def recompute_at_temperature(
+    distributions: Sequence[D4ProbeDistribution], temperature: float
+) -> list[D4ProbeDistribution]:
+    """Rebuild distributions at a different `T` from the STORED log-probabilities.
+
+    **The sensitivity band costs no additional inference.** The expensive step is
+    `CandidateScorer.mean_token_logprobs`, a teacher-forced GPU pass, and its
+    output is already carried on every :class:`D4ProbeDistribution` as
+    ``mean_logprobs``. `T` enters only afterwards, in
+    ``softmax(mean_logprob / T)``, which is arithmetic.
+
+    So ADR-0024's band ``T in {0.5, 1, 2, 4}`` is ONE scoring run followed by
+    four CPU transforms of the identical numbers — which is also what makes the
+    band a clean sensitivity analysis rather than four separate experiments:
+    every temperature sees exactly the same model output.
+    """
+    builder = SoftmaxOverMeanLogprob(temperature=temperature)
+    return [
+        D4ProbeDistribution(
+            probe_id=d.probe_id, candidates=d.candidates,
+            mean_logprobs=d.mean_logprobs,
+            probabilities=tuple(builder.to_distribution(d.mean_logprobs)),
+            scorer=d.scorer, builder=builder.name,
+        )
+        for d in distributions
+    ]
+
+
+def temperature_band(
+    constraint_id: str,
+    distributions: Sequence[D4ProbeDistribution],
+    *,
+    temperatures: Sequence[float] = SENSITIVITY_TEMPERATURES,
+    primary: float = PRIMARY_TEMPERATURE,
+) -> dict[str, Any]:
+    """Mean pairwise JSD at each `T`, from one set of stored log-probabilities.
+
+    The primary value is labelled as such and the others are labelled
+    exploratory, because a reader who sees four numbers without that labelling
+    will pick one. Cross-`T` magnitude comparison is forbidden (ADR-0024): the
+    band shows whether a QUALITATIVE statement survives, not which `T` gives a
+    bigger number.
+    """
+    if primary not in tuple(temperatures):
+        raise ValueError(
+            f"the primary temperature {primary} must be inside the reported band "
+            f"{list(temperatures)}, or the primary result is not comparable with "
+            "any of its own sensitivity values"
+        )
+    out: dict[str, Any] = {
+        "constraint_id": constraint_id,
+        "primary_temperature": primary,
+        "n_probes": len(distributions),
+        "reused_one_scoring_run": True,
+        "by_temperature": {},
+        "cross_temperature_magnitude_comparison": "FORBIDDEN (ADR-0024)",
+        # The default on D4Analysis, restated rather than read off the class:
+        # the field lives in __slots__, so class-level access is not valid.
+        "interpretation_limit": (
+            "EXPLORATORY. Two distributions can differ substantially while "
+            "agreeing on the top answer, and can be nearly identical while "
+            "straddling a decision boundary. Absolute JSD is NOT comparable "
+            "across constraints and is NOT evidence of a contradiction."
+        ),
+    }
+    for t in temperatures:
+        dists = recompute_at_temperature(distributions, t)
+        values = [
+            jensen_shannon_divergence(a.probabilities, b.probabilities)
+            for a, b in combinations(dists, 2)
+        ]
+        out["by_temperature"][str(t)] = {
+            "temperature": t,
+            "role": "PRIMARY (preregistered)" if t == primary else "exploratory",
+            "mean_pairwise_jsd": (sum(values) / len(values)) if values else None,
+            "max_pairwise_jsd": max(values) if values else None,
+            "n_pairs": len(values),
+            "builder": SoftmaxOverMeanLogprob(temperature=t).name,
+        }
+    return out

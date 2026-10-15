@@ -206,3 +206,97 @@ def test_scorer_returning_the_wrong_number_of_scores_is_rejected():
         D4Distributional(
             FlatScorer({"p1": [-1.0, -2.0]}), SoftmaxOverMeanLogprob(temperature=1.0)
         ).distribution_for("P01", "p1", ["a", "b", "c"])
+
+
+# --- ADR-0024: T=1 primary, band is a CPU transform ----------------------
+
+def test_the_sensitivity_band_reuses_one_scoring_run():
+    """The expensive step is teacher-forced scoring; T enters only afterwards.
+
+    So ADR-0024's band costs ONE GPU run and four CPU transforms of the
+    identical log-probabilities -- which is also what makes it a clean
+    sensitivity analysis: every temperature sees the same model output.
+    """
+    from semintegrity.detectors.d4.distributional import (
+        D4ProbeDistribution,
+        SoftmaxOverMeanLogprob,
+        recompute_at_temperature,
+    )
+
+    logprobs = (-0.2, -1.5, -3.0)
+    base = SoftmaxOverMeanLogprob(temperature=1.0)
+    d = D4ProbeDistribution(
+        probe_id="K-C1-GEO-01-P01", candidates=("a", "b", "c"),
+        mean_logprobs=logprobs,
+        probabilities=tuple(base.to_distribution(logprobs)),
+        scorer="stub", builder=base.name,
+    )
+    for t in (0.5, 2.0, 4.0):
+        out = recompute_at_temperature([d], t)[0]
+        assert out.mean_logprobs == logprobs, "log-probs must be reused, not rescored"
+        assert out.probabilities != d.probabilities
+        assert f"T={t}" in out.builder
+        assert sum(out.probabilities) == pytest.approx(1.0)
+
+
+def test_lower_temperature_sharpens_and_raises_jsd():
+    """Documents exactly how T transforms the score, which ADR-0024 requires."""
+    from semintegrity.detectors.d4.distributional import (
+        D4ProbeDistribution,
+        SoftmaxOverMeanLogprob,
+        jensen_shannon_divergence,
+        recompute_at_temperature,
+    )
+
+    def _d(pid, lps):
+        b = SoftmaxOverMeanLogprob(temperature=1.0)
+        return D4ProbeDistribution(
+            probe_id=pid, candidates=("a", "b"), mean_logprobs=lps,
+            probabilities=tuple(b.to_distribution(lps)), scorer="s", builder=b.name,
+        )
+
+    pair = [_d("p1", (-0.1, -2.0)), _d("p2", (-2.0, -0.1))]
+    jsds = {}
+    for t in (0.5, 1.0, 2.0, 4.0):
+        a, b = recompute_at_temperature(pair, t)
+        jsds[t] = jensen_shannon_divergence(a.probabilities, b.probabilities)
+    assert jsds[0.5] > jsds[1.0] > jsds[2.0] > jsds[4.0], (
+        "sharpening the distributions must raise the divergence; this is why "
+        "cross-temperature magnitude comparison is forbidden"
+    )
+
+
+def test_the_band_labels_the_primary_and_forbids_cross_T_comparison():
+    from semintegrity.detectors.d4.distributional import (
+        PRIMARY_TEMPERATURE,
+        SENSITIVITY_TEMPERATURES,
+        D4ProbeDistribution,
+        SoftmaxOverMeanLogprob,
+        temperature_band,
+    )
+
+    assert PRIMARY_TEMPERATURE == 1.0
+    assert PRIMARY_TEMPERATURE in SENSITIVITY_TEMPERATURES
+
+    b = SoftmaxOverMeanLogprob(temperature=1.0)
+    dists = [
+        D4ProbeDistribution(
+            probe_id=f"K-C1-GEO-01-P0{i}", candidates=("a", "b"),
+            mean_logprobs=lps, probabilities=tuple(b.to_distribution(lps)),
+            scorer="s", builder=b.name,
+        )
+        for i, lps in enumerate([(-0.1, -2.0), (-2.0, -0.1), (-1.0, -1.0)], start=1)
+    ]
+    out = temperature_band("K-C1-GEO-01", dists)
+    assert out["reused_one_scoring_run"] is True
+    assert out["by_temperature"]["1.0"]["role"].startswith("PRIMARY")
+    assert out["by_temperature"]["4.0"]["role"] == "exploratory"
+    assert out["cross_temperature_magnitude_comparison"] == "FORBIDDEN (ADR-0024)"
+    assert "EXPLORATORY" in out["interpretation_limit"]
+
+
+def test_a_primary_outside_the_band_is_refused():
+    from semintegrity.detectors.d4.distributional import temperature_band
+
+    with pytest.raises(ValueError, match="must be inside the reported band"):
+        temperature_band("K-C1-GEO-01", [], temperatures=(0.5, 2.0), primary=1.0)

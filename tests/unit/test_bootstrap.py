@@ -189,3 +189,61 @@ def test_adjusted_p_agrees_with_the_rejection_flags():
     q = bh_adjusted_p(p)
     flags = benjamini_hochberg(p, alpha=0.05)
     assert [qi <= 0.05 for qi in q] == flags
+
+
+# --- paired cluster bootstrap (model comparisons) ------------------------
+# Every model is evaluated on the IDENTICAL 120 constraints, so a model contrast
+# is paired. bootstrap_difference resamples the arms independently and is wrong
+# here: it throws the pairing away and widens the interval.
+def test_paired_bootstrap_requires_aligned_arms():
+    from semintegrity.analysis.bootstrap import paired_cluster_bootstrap
+
+    with pytest.raises(ValueError) as exc:
+        paired_cluster_bootstrap([0.1, 0.2], [0.1])
+    assert "same constraint" in str(exc.value)
+
+
+def test_paired_bootstrap_point_estimate_is_the_mean_paired_difference():
+    from semintegrity.analysis.bootstrap import paired_cluster_bootstrap
+
+    res = paired_cluster_bootstrap([0.5, 0.4, 0.3], [0.2, 0.1, 0.0], n_boot=200)
+    assert res.estimate == pytest.approx(0.3)
+    assert res.n_clusters == 3
+    assert res.n_defined == 3
+
+
+def test_paired_bootstrap_skips_clusters_undefined_in_either_arm():
+    from semintegrity.analysis.bootstrap import paired_cluster_bootstrap
+
+    res = paired_cluster_bootstrap([0.5, None, 0.3], [0.2, 0.1, None], n_boot=200)
+    # Only the first cluster has both arms defined.
+    assert res.estimate == pytest.approx(0.3)
+    assert res.n_defined == 1
+    assert res.n_clusters == 3
+
+
+def test_paired_bootstrap_is_tighter_than_the_unpaired_one_when_correlated():
+    """The whole reason the paired version exists."""
+    from semintegrity.analysis.bootstrap import (
+        bootstrap_difference,
+        paired_cluster_bootstrap,
+    )
+
+    # Strongly correlated arms with a constant offset: the paired difference has
+    # zero variance, the unpaired one inherits the spread of both arms.
+    a = [0.10, 0.30, 0.50, 0.70, 0.90, 0.20, 0.40, 0.60]
+    b = [x - 0.05 for x in a]
+    paired = paired_cluster_bootstrap(a, b, n_boot=2000)
+    unpaired = bootstrap_difference(a, b, n_boot=2000)
+    assert paired.estimate == pytest.approx(unpaired.estimate, abs=1e-9)
+    paired_width = paired.ci_high - paired.ci_low
+    unpaired_width = unpaired.ci_high - unpaired.ci_low
+    assert paired_width < unpaired_width
+
+
+def test_paired_bootstrap_is_seed_reproducible():
+    from semintegrity.analysis.bootstrap import paired_cluster_bootstrap
+
+    kw = {"n_boot": 500, "seed": 20250058}
+    a, b = [0.5, 0.4, 0.3, 0.9], [0.2, 0.1, 0.0, 0.4]
+    assert paired_cluster_bootstrap(a, b, **kw) == paired_cluster_bootstrap(a, b, **kw)

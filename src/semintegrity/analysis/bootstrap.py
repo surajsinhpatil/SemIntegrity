@@ -228,6 +228,70 @@ def bootstrap_difference(
     )
 
 
+def paired_cluster_bootstrap(
+    a_values: Sequence[float | None],
+    b_values: Sequence[float | None],
+    *,
+    n_boot: int = 10000,
+    ci: float = 0.95,
+    seed: int = 20250058,
+) -> BootstrapResult:
+    """Difference between two measurements of the SAME constraints.
+
+    Used for MODEL comparisons, where every model is evaluated on the identical
+    120 constraints. :func:`bootstrap_difference` is wrong here: it resamples
+    each arm independently, which discards the pairing and inflates the interval
+    because between-constraint variance — much the larger component — enters
+    twice instead of cancelling.
+
+    So one constraint INDEX is resampled and used for both arms, which is the
+    §4.11 framework unchanged (``independent_unit: constraint``,
+    ``resample: constraints_with_replacement``) applied to a paired contrast.
+
+    ``a_values[i]`` and ``b_values[i]`` must describe the same constraint. A
+    cluster where EITHER arm is undefined contributes to neither mean, so an
+    NA in one model does not silently shift the other's.
+    """
+    if len(a_values) != len(b_values):
+        raise ValueError(
+            f"paired bootstrap needs aligned arms, got {len(a_values)} and "
+            f"{len(b_values)}; the i-th value of each must be the same constraint"
+        )
+    n = len(a_values)
+    pairs = [
+        (a, b) for a, b in zip(a_values, b_values, strict=True)
+        if a is not None and b is not None
+    ]
+    point = (
+        sum(a - b for a, b in pairs) / len(pairs) if pairs else None
+    )
+    if point is None or n == 0:
+        return BootstrapResult(None, None, None, n, len(pairs), n_boot, ci, "percentile")
+
+    rng = random.Random(seed)
+    reps: list[float] = []
+    degenerate = 0
+    for _ in range(n_boot):
+        drawn = [
+            (a_values[i], b_values[i])
+            for i in (rng.randrange(n) for _ in range(n))
+        ]
+        usable = [(a, b) for a, b in drawn if a is not None and b is not None]
+        if not usable:
+            degenerate += 1
+            continue
+        reps.append(sum(a - b for a, b in usable) / len(usable))
+    if not reps:
+        return BootstrapResult(point, None, None, n, len(pairs), n_boot, ci,
+                               "percentile", degenerate)
+    reps.sort()
+    alpha = (1 - ci) / 2
+    return BootstrapResult(
+        point, _percentile(reps, alpha), _percentile(reps, 1 - alpha),
+        n, len(pairs), n_boot, ci, "percentile", degenerate,
+    )
+
+
 # --- multiplicity ------------------------------------------------------------
 
 def benjamini_hochberg(p_values: Sequence[float], alpha: float = 0.05) -> list[bool]:

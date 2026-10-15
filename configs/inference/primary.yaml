@@ -6,11 +6,19 @@ tiers_included: [primary]
 decoding: { temperature: 0.0, top_p: 1.0, top_k: -1, repetition_penalty: 1.0, seed: 20250058 }
 max_new_tokens: 24
 semantic_instruction_id: trackA.v1
-models: [llama31-8b, mistral7b-v03, qwen25-7b, gemma2-9b, qwen25-3b, qwen25-14b, llama33-70b]
+# ROSTER REDUCED 2026-10-15 (researcher decision). Was 7:
+#   [llama31-8b, mistral7b-v03, qwen25-7b, gemma2-9b, qwen25-3b, qwen25-14b, llama33-70b]
+# llama33-70b: 141 GB of weights against ~52 GB of usable quota -- unstageable.
+# gemma2-9b:   dropped with the reduction (ADR-0006 softcap gate also NOT_RUN).
+# llama31-8b:  replaced by olmo2-7b to keep an AI2 lineage in the evaluated set.
+# Retired configs live in configs/models/retired/ with their pins intact.
+# CONSEQUENCE: the within-family scale axis is now 3B-14B (4.7x), not 3B-70B
+# (23x). The study can say nothing about frontier scale and must state so.
+models: [qwen25-3b, qwen25-7b, qwen25-14b, mistral7b-v03, olmo2-7b]
 workload:
   probes: 960
   per_model_generations: 960
-  total_generations: 6720
+  total_generations: 4800   # 960 x 5
 output:
   format: jsonl
   path: results/raw/primary_trackA/

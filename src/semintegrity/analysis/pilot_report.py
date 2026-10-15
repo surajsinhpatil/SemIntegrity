@@ -10,21 +10,20 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter, defaultdict
-from itertools import combinations
+from collections import Counter
 from pathlib import Path
 
 from ..benchmark.loader import load_split
-from ..canonicalization.canonicaliser import CANONICALISER_VERSION, canonicalise
+from ..canonicalization.canonicaliser import CANONICALISER_VERSION
 from ..detectors.d0.registry import default_registry
-from ..detectors.d1.exact_match import check_all_pairs, coverage
 from ..inference.backend import assert_no_stub_responses
 from ..kb.adapter import WikidataKB
 from ..kb.cache import CacheMode, KBCache
-from ..schemas.enums import ResponseLabel, Verdict
+from ..schemas.enums import ResponseLabel
 from ..schemas.response import RawResponse
 from ..utils.io import read_jsonl
 from ..utils.paths import data_path
+from .evaluate import constraint_rows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -60,86 +59,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"no responses in {args.raw}")
         return 2
 
-    by_constraint = defaultdict(list)
-    for r in raws:
-        if r.constraint_id not in constraints:
-            raise KeyError(f"response references unknown constraint {r.constraint_id}")
-        if r.probe_id not in probes:
-            raise KeyError(f"response references unknown probe {r.probe_id}")
-        by_constraint[r.constraint_id].append(
-            canonicalise(r, constraints[r.constraint_id], probes[r.probe_id])
-        )
-
-    rows, labels = [], Counter()
-    for cid, canon in sorted(by_constraint.items()):
-        c = constraints[cid]
-        labels.update(x.label for x in canon)
-        results = check_all_pairs(canon)
-        evaluable = [r for r in results if r.verdict is not Verdict.NOT_APPLICABLE]
-        contradictions = sum(r.is_contradiction for r in results)
-
-        # --- D0 -------------------------------------------------------------
-        # BOTH readings are computed and stored. Q22 (whether "D0" is the
-        # pairwise or the set-level verdict) is awaiting the researcher, and
-        # picking one here would decide it by implementation.
-        d0_pair_total = d0_pair_covered = d0_pair_violations = 0
-        d0_set_verdict = None
-        d0_note = d0_status
-        if d0_kb is not None and d0_registry.has(c.formal_predicate):
-            pred = d0_registry.get(c.formal_predicate)
-            usable = [x for x in canon if x.label is ResponseLabel.ANSWER]
-            for x, y in combinations(usable, 2):
-                r = pred.check_pair(c, x, y, d0_kb)
-                d0_pair_total += 1
-                d0_pair_covered += r.is_covered
-                d0_pair_violations += r.verdict is Verdict.VIOLATION
-            set_result = pred.check_set(c, canon, d0_kb)
-            d0_set_verdict = set_result.verdict.value
-            d0_note = set_result.reason or "ok"
-        elif d0_kb is not None:
-            d0_note = f"no predicate registered for {c.formal_predicate!r}"
-        # A NEGATED response asserted "not g". It IS an answer — the model
-        # committed to something — but it is factually wrong whenever g is the
-        # gold answer, so it counts in the denominator of truth accuracy and
-        # never in the numerator. Folding it into abstention instead would
-        # flatter the model by hiding a wrong answer as a refusal.
-        definite = [x for x in canon if x.label is ResponseLabel.ANSWER]
-        negated = [x for x in canon if x.label is ResponseLabel.NEGATED]
-        answered = definite + negated
-        correct = sum(x.canonical_answer == c.gold_answer for x in definite)
-        cluster = Counter(x.canonical_answer for x in definite)
-        rows.append({
-            "constraint_id": cid,
-            "class": c.constraint_class.value,
-            "domain": c.domain.value,
-            "n_responses": len(canon),
-            "n_answer": len(answered),
-            "n_definite": len(definite),
-            "n_negated": len(negated),
-            "n_abstain": sum(x.label is ResponseLabel.ABSTAIN for x in canon),
-            "n_pairs": len(results),
-            "n_evaluable_pairs": len(evaluable),
-            "n_contradictory_pairs": contradictions,
-            # PSCR is UNDEFINED with no evaluable pairs — never imputed as 0 (Q6).
-            "pscr": (contradictions / len(evaluable)) if evaluable else None,
-            # PCS uses the DEFINITE cluster only: "not Canberra" names no cluster.
-            "pcs": (max(cluster.values()) / len(canon)) if cluster else None,
-            "truth_accuracy": (correct / len(answered)) if answered else None,
-            "abstention_rate": sum(x.label is ResponseLabel.ABSTAIN for x in canon) / len(canon),
-            "d1_coverage": coverage(results),
-            # D0 coverage is a RESULT in its own right (§4.8.1,
-            # configs/detectors/d0_symbolic.yaml), never a diagnostic to hide.
-            # It is computed over ALL pairs of the constraint, so responses D0
-            # cannot use -- including NEGATED, which supplies no definite value
-            # to a symbolic predicate -- register as reduced coverage.
-            "d0_pairs_considered": d0_pair_total,
-            "d0_pairs_covered": d0_pair_covered,
-            "d0_coverage": (d0_pair_covered / len(results)) if results else None,
-            "d0_pair_violations": d0_pair_violations,
-            "d0_pscr": (d0_pair_violations / d0_pair_covered) if d0_pair_covered else None,
-            "d0_set_verdict": d0_set_verdict,
-            "d0_note": d0_note,
-        })
+    rows, labels = constraint_rows(
+        raws, constraints, probes,
+        d0_kb=d0_kb, d0_registry=d0_registry, d0_status=d0_status,
+    )
 
     # The CANON go/no-go criterion (configs/inference/pilot.yaml) is a
     # preregistered gate, so the report states it rather than leaving it to be

@@ -52,3 +52,50 @@ is excluded separately for its non-commercial licence, which conflicts with the
   Qwen lineage, but the point is to measure that rather than assume it.
 * If Phi-4 proves degenerate on the dev split (pilot criterion `NONDEGEN`),
   fall back to IBM Granite 3.x or a larger OLMo-2 — recorded as alternatives.
+
+
+---
+
+# Amendment 2026-10-15 — the reproducibility judge moves to Granite 3.x
+
+**Approved by the researcher.** Amends the SECONDARY judge only. The primary
+judge (`microsoft/phi-4`), the 15% stratified subset, and every rationale in the
+body above are unchanged.
+
+## Why
+
+`olmo2-7b` (`allenai/OLMo-2-1124-7B-Instruct`) entered the **evaluated** roster
+on 2026-10-15, replacing `llama31-8b`. The secondary judge was
+`allenai/OLMo-2-1124-13B-Instruct`. On the 15% subset an OLMo-2 model would
+therefore have been judging an OLMo-2 model: same lineage, same Dolma
+pretraining corpus, same tokenizer family.
+
+That is exactly what this ADR's own **externality** argument forbids —
+*"Phi (Microsoft) and OLMo (AI2) are independent lineages"* — and exactly what
+`configs/models/_judge.yaml`'s LINEAGE CONTAMINATION TRAP already states as a
+rule: *"Different organisation is NOT the test; shared lineage is."* The trap
+list disqualified `DeepSeek-R1-Distill-Qwen-*` for having a Qwen base while Qwen
+was evaluated. OLMo-2 is now the same case.
+
+## Decision
+
+Secondary judge becomes **`ibm-granite/granite-3.1-8b-instruct`**, which §6 of
+this ADR already records as a fallback ("IBM Granite 3.x or a larger OLMo-2").
+It is not a new choice; it is the recorded alternative, selected because the
+other recorded alternative is now contaminated.
+
+`allenai/OLMo-2-*` is added to `_judge.yaml:disqualified`.
+
+## What this costs, and does not
+
+* **Nothing is invalidated.** D3 has never been executed — no judging run, no
+  agreement figure, no pilot result depends on the previous choice.
+* **Unpinned.** `revision: null`, deliberately: §4.5 needs a real 40-hex SHA
+  resolved from the Hub, and inventing one is worse than leaving it null.
+  Resolve from the login node before any judging run.
+* **Unverified for vLLM.** `Olmo2ForCausalLM` support was confirmed by listing
+  the installed wheel (`vllm/model_executor/models/olmo2.py` exists on
+  0.11.2). `GraniteForCausalLM` has NOT been checked the same way and must be,
+  before D3 is scheduled.
+* **The primary judge is untouched**, so the open-weight-judge argument in the
+  body of this ADR stands as approved.

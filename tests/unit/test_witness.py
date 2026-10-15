@@ -439,3 +439,60 @@ def test_q26_the_shipped_policy_maps_all_eight_approved_providers():
     assert classifier.provider_of_host("nssdc.gsfc.nasa.gov") == "nasa"
     assert classifier.provider_of_host("doi.org") == "crossref"
     assert classifier.provider_of_host("nasa.gov") is None, "no suffix matching"
+
+
+# --- the stated-in map's SHAPE (2026-10-08) ------------------------------
+# The map is keyed by PROVIDER and holds a LIST of P248 items. Written inverted
+# it used to yield silent nonsense: the provider string was iterated character
+# by character, so `_known_stated_in` returned {'s','t','a','n','d',...} and
+# every real citation looked unmapped. This map decides whether a source may
+# corroborate a benchmark fact, so a mis-shaped policy must fail loudly.
+def _classifier(mapping):
+    import copy
+
+    from semintegrity.kb.cache import CacheMode, KBCache
+    from semintegrity.kb.corroboration import CorroborationPolicy
+    from semintegrity.kb.witness import WitnessClassifier
+
+    # DEEP COPY: load_config caches and returns a SHARED dict, so mutating
+    # policy.cfg in place would leak into every later test in the session.
+    policy = CorroborationPolicy()
+    policy.cfg = copy.deepcopy(policy.cfg)
+    policy.cfg["witness_classification"] = dict(
+        policy.cfg.get("witness_classification") or {},
+        wikidata_stated_in_qids=mapping,
+    )
+    return WitnessClassifier(KBCache("data/raw/wikidata_cache", CacheMode.FROZEN), policy)
+
+
+def test_correctly_shaped_stated_in_map_resolves():
+    wc = _classifier({"standards-body": ["Q19606873"]})
+    assert wc.stated_in_qids_for("standards-body") == {"Q19606873"}
+    assert wc._known_stated_in() == {"Q19606873"}
+
+
+def test_inverted_stated_in_map_is_refused_not_silently_mangled():
+    import pytest
+
+    wc = _classifier({"Q19606873": "standards-body"})
+    with pytest.raises(ValueError) as exc:
+        wc._known_stated_in()
+    assert "inverted" in str(exc.value)
+
+
+def test_non_qid_values_in_the_stated_in_map_are_refused():
+    import pytest
+
+    wc = _classifier({"standards-body": ["not-a-qid"]})
+    with pytest.raises(ValueError) as exc:
+        wc._known_stated_in()
+    assert "non-QID" in str(exc.value)
+
+
+def test_the_live_policy_maps_the_si_brochure_to_standards_body():
+    """Q19606873 is the BIPM SI Brochure; checked against the item 2026-10-08."""
+    from semintegrity.kb.corroboration import CorroborationPolicy
+
+    mapping = (CorroborationPolicy().cfg["witness_classification"]
+               ["wikidata_stated_in_qids"])
+    assert mapping["standards-body"] == ["Q19606873"]

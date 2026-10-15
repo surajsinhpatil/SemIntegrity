@@ -80,7 +80,17 @@ witness_classification:
   # P248 reference yields `undetermined`, which blocks promotion — the
   # classifier errs toward refusing, never toward accepting. A researcher adds
   # an entry here once, per observed "stated in" item, after checking it.
-  wikidata_stated_in_qids: {}
+  # Each entry was checked against the item itself before being added, as the
+  # paragraph above requires. Mapping an item can only move a verdict from
+  # `undetermined` to `same-witness` — both fail to qualify — so this list makes
+  # the classifier more informative, never more permissive.
+  wikidata_stated_in_qids:
+    # Q19606873 = "SI Brochure (8th edition)". P123 publisher -> Q229478 (BIPM)
+    # and P953 full-work URL -> bipm.org. It IS the approved `standards-body`
+    # provider, so a BIPM source offered for a claim citing it is a SAME-WITNESS.
+    # Observed 2026-10-08 on Q11573 (metre) P31.
+    standards-body:
+      - Q19606873
 
   # --- Q26, approved 2026-10-07 -----------------------------------------
   # WITNESS IDENTITY IS DETERMINED AT PROVIDER LEVEL, NOT HOST LEVEL.

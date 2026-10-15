@@ -34,6 +34,7 @@ no D2 verdict at all.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 from ...schemas.constraint import Constraint
 from ...schemas.enums import AnswerType, ResponseLabel
@@ -59,15 +60,35 @@ def negate(proposition: str) -> str:
     return f"{NEGATION_PREFIX}{body}{trailing}"
 
 
-def _substitute(proposition: str, gold: str, replacement: str) -> str:
-    """Replace the gold answer inside the proposition, case-insensitively."""
-    pattern = re.compile(re.escape(gold), re.IGNORECASE)
-    if not pattern.search(proposition):
-        raise ClaimRenderingError(
-            f"gold answer {gold!r} does not occur in gold_proposition "
-            f"{proposition!r}; cannot render a claim without inventing one"
-        )
-    return pattern.sub(replacement, proposition, count=1)
+def _substitute(
+    proposition: str, gold: str, replacement: str, aliases: Sequence[str] = ()
+) -> str:
+    """Replace the gold answer inside the proposition, case-insensitively.
+
+    ALIASES ARE CONSULTED, and that is not a loosening. A date-answered
+    constraint stores its gold answer in ISO form (``1992-12-31``) while the
+    proposition reads naturally ("ceased to exist on 31 December 1992"), so a
+    literal match finds nothing. `answer_aliases` is authored data that says
+    exactly "these are other surface forms of this answer" — using it to LOCATE
+    the answer is what it is for. Nothing is invented: an alias must have been
+    written down by the author to be tried at all.
+
+    Measured 2026-10-15: 13 of 44 non-boolean constraints were unrenderable
+    without this, which blocked D2 and D3 entirely. Both detectors depend on
+    `render_claim`, and neither had ever been executed, so it went unnoticed
+    from authoring until the first judge run.
+    """
+    for candidate in (gold, *aliases):
+        if not candidate:
+            continue
+        pattern = re.compile(re.escape(candidate), re.IGNORECASE)
+        if pattern.search(proposition):
+            return pattern.sub(replacement, proposition, count=1)
+    raise ClaimRenderingError(
+        f"gold answer {gold!r} does not occur in gold_proposition "
+        f"{proposition!r}, nor does any registered alias {list(aliases)}; "
+        "cannot render a claim without inventing one"
+    )
 
 
 def render_claim(constraint: Constraint, response: CanonicalResponse) -> str | None:
@@ -99,5 +120,6 @@ def render_claim(constraint: Constraint, response: CanonicalResponse) -> str | N
             f"{response.probe_id}: boolean answer {answer!r} is neither YES nor NO"
         )
 
-    claim = _substitute(proposition, constraint.gold_answer, answer)
+    aliases = (constraint.answer_aliases or {}).get(constraint.gold_answer, ())
+    claim = _substitute(proposition, constraint.gold_answer, answer, aliases)
     return negate(claim) if response.label is ResponseLabel.NEGATED else claim

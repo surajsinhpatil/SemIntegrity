@@ -237,6 +237,7 @@ class BenchmarkDesignValidator:
         report.results.append(self._corroboration(subset))
         report.results.append(self._comparison_universe(subset))
         report.results.append(self._answer_type_allocation(subset))
+        report.results.append(self._claims_renderable(subset))
         if known_predicates is not None:
             report.results.append(self._predicates_registered(subset, set(known_predicates)))
         return report
@@ -480,6 +481,50 @@ class BenchmarkDesignValidator:
         return RuleResult(
             "answer_type_allocation", True,
             f"answer type follows the (axis, class) rule; {detail}",
+        )
+
+    def _claims_renderable(self, cs: Sequence[Constraint]) -> RuleResult:
+        """Every non-boolean constraint's answer must be locatable in its own
+        gold proposition, directly or through a registered alias.
+
+        D2 and D3 both build a claim by SUBSTITUTING the model's answer for the
+        gold answer inside `gold_proposition`. If the gold answer does not occur
+        there, `d2.templates.render_claim` refuses — correctly, since inventing
+        a proposition would put words in the model's mouth.
+
+        Added 2026-10-15 after the first D3 run aborted on `K-C1-BIO-14`:
+        gold `1953-04-25` against a proposition reading "25 April 1953". THIRTEEN
+        of 44 non-boolean constraints were affected, all date-answered. It went
+        unnoticed from authoring because D2 and D3 are the only consumers of
+        `render_claim` and NEITHER HAD EVER BEEN EXECUTED. A gate that only fires
+        inside a detector is a gate that fires after the GPU time is spent.
+
+        Boolean constraints are exempt: the proposition IS the claim, asserted
+        by YES and negated by NO, so nothing is substituted.
+        """
+        from ..detectors.d2.templates import ClaimRenderingError, _substitute
+
+        offenders = []
+        for c in cs:
+            if str(c.answer_type) == "boolean":
+                continue
+            aliases = (c.answer_aliases or {}).get(c.gold_answer, ())
+            try:
+                _substitute(c.gold_proposition, c.gold_answer, "<X>", aliases)
+            except ClaimRenderingError:
+                offenders.append(
+                    f"{c.constraint_id} ({c.answer_type!s}): gold {c.gold_answer!r} "
+                    f"not in proposition and no alias matches"
+                )
+        n = sum(1 for c in cs if str(c.answer_type) != "boolean")
+        return RuleResult(
+            "claims_renderable",
+            not offenders,
+            f"{n} non-boolean constraint(s) checked; "
+            + ("every answer is locatable in its proposition"
+               if not offenders else
+               f"{len(offenders)} cannot render a claim — D2 and D3 would refuse them"),
+            offenders,
         )
 
     def _comparison_universe(self, cs: Sequence[Constraint]) -> RuleResult:

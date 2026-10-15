@@ -5322,6 +5322,10 @@ families:
         answer_type: date
         answer_space: ["1953-05-30", "1953-04-25", "1962-12-10"]
         gold_answer: "1953-05-30"
+        # The proposition reads "30 May 1953"; the alias lets
+        # d2.templates.render_claim LOCATE the answer in it (D2/D3).
+        answer_aliases:
+          "1953-05-30": ["30 May 1953"]
         entities:
           - {label: "Genetical Implications of the Structure of Deoxyribonucleic Acid", qid: Q22122440}
           - {label: "Molecular Structure of Nucleic Acids: A Structure for Deoxyribose Nucleic Acid", qid: Q1895685}
@@ -5429,6 +5433,8 @@ families:
         answer_type: date
         answer_space: ["1789-08-26", "1776-07-04", "1791-09-03"]
         gold_answer: "1789-08-26"
+        answer_aliases:
+          "1789-08-26": ["26 August 1789"]
         entities:
           - {label: "Declaration of the Rights of Man and of the Citizen", qid: Q169759}
           - {label: "United States Declaration of Independence", qid: Q127912}
@@ -5535,6 +5541,8 @@ families:
         answer_type: date
         answer_space: ["1948-07-15", "1947", "1958-09-12"]
         gold_answer: "1948-07-15"
+        answer_aliases:
+          "1948-07-15": ["15 July 1948"]
         entities:
           - {label: "The Transistor, A Semi-Conductor Triode", qid: Q21709231}
           - {label: "point-contact transistor", qid: Q1515631}

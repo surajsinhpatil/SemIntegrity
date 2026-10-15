@@ -81,6 +81,7 @@ def make_constraint(
         if cls is ConstraintClass.C4
         else None
     )
+    answers = _answer_fields(cid, cls, sch)
     return Constraint.model_validate(
         {
             "constraint_id": cid,
@@ -93,14 +94,23 @@ def make_constraint(
             "entities": [f"EntityA-{cid}", f"EntityB-{cid}"],
             "entity_qids": [f"Q{9000000 + index}", f"Q{9500000 + index}"],
             "entity_sitelinks": list(sitelinks),
-            "gold_proposition": f"[{SYNTHETIC_MARKER}] fictional proposition for {cid}",
+            # The gold answer must OCCUR here: D2/D3 render a claim by
+            # substituting the model's answer for the gold answer inside this
+            # string, and design_validator._claims_renderable enforces it. A
+            # fixture whose propositions are unrenderable would let a real
+            # benchmark defect of that shape pass the suite — which is exactly
+            # how 13 date constraints reached a GPU before being caught.
+            "gold_proposition": (
+                f"[{SYNTHETIC_MARKER}] fictional proposition for {cid}: "
+                f"the answer is {answers['gold_answer']}."
+            ),
             "gold_source": "SYNTHETIC",
             "gold_source_url": "https://example.invalid/synthetic",
             "gold_source_date": "2026-01-01",
             "temporal_validity": temporal.model_dump(mode="json") if temporal else None,
             "ambiguity_notes": "",
             "prerequisite_atomic_facts": [],
-            **_answer_fields(cid, cls, sch),
+            **answers,
             "split": split.value,
             "notes": SYNTHETIC_MARKER,
         }

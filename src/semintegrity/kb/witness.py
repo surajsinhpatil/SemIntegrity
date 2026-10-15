@@ -244,18 +244,45 @@ class WitnessClassifier:
                     return str(provider).strip().lower()
         return None
 
+    def _stated_in_map(self) -> dict[str, list[str]]:
+        """The provider -> [P248 item] map, with its SHAPE checked.
+
+        The map is keyed by PROVIDER and holds a list of QIDs. Writing it
+        inverted (``Q19606873: standards-body``) used to yield silent nonsense:
+        the provider string was iterated character by character, so
+        ``_known_stated_in`` returned ``{'s','t','a','n','d',...}`` and every
+        real citation looked unmapped. A mis-shaped policy must fail loudly —
+        this map decides whether a source may corroborate a benchmark fact.
+        """
+        mapping = self._witness_cfg.get("wikidata_stated_in_qids") or {}
+        if not isinstance(mapping, dict):
+            raise ValueError(
+                "witness_classification.wikidata_stated_in_qids must be a mapping "
+                f"of provider -> [P248 item], got {type(mapping).__name__}"
+            )
+        out: dict[str, list[str]] = {}
+        for provider, qids in mapping.items():
+            if isinstance(qids, str) or not isinstance(qids, list | tuple | set):
+                raise ValueError(
+                    "witness_classification.wikidata_stated_in_qids is keyed by "
+                    f"PROVIDER and holds a LIST of items, but {provider!r} maps to "
+                    f"{qids!r}. Did you write it inverted (qid: provider)?"
+                )
+            bad = [q for q in qids if not re.fullmatch(r"Q\d+", str(q))]
+            if bad:
+                raise ValueError(
+                    f"witness_classification.wikidata_stated_in_qids[{provider!r}] "
+                    f"contains non-QID value(s) {bad}"
+                )
+            out[str(provider).strip().lower()] = [str(q) for q in qids]
+        return out
+
     def stated_in_qids_for(self, provider: str) -> set[str]:
         """P248 items the policy has recorded as belonging to this provider."""
-        mapping = self._witness_cfg.get("wikidata_stated_in_qids") or {}
-        if not isinstance(mapping, dict):
-            return set()
-        return {str(q) for q in (mapping.get(provider.strip().lower()) or ())}
+        return set(self._stated_in_map().get(provider.strip().lower(), ()))
 
     def _known_stated_in(self) -> set[str]:
-        mapping = self._witness_cfg.get("wikidata_stated_in_qids") or {}
-        if not isinstance(mapping, dict):
-            return set()
-        return {str(q) for qids in mapping.values() for q in (qids or ())}
+        return {q for qids in self._stated_in_map().values() for q in qids}
 
     # -- the classification --------------------------------------------------
     def classify(

@@ -189,3 +189,144 @@ def audit_all(
             "frozen or used until every case passes:\n  - " + "\n  - ".join(failures)
         )
     return results
+
+
+# ---------------------------------------------------------------------------
+# D0AUDIT-A — analytic audit cases (ADR-0023 D3)
+# ---------------------------------------------------------------------------
+#
+# The §4.12 `D0AUDIT` criterion required three HAND-CHECKED instances per
+# predicate, with `expected_verdict` supplied by a named human. That criterion
+# is superseded by `D0AUDIT-A`, which replaces the human verdict with one that
+# follows DEDUCTIVELY from the predicate's own declared `formal_statement`
+# against a constructed fixture.
+#
+# WHAT THIS IS: a software-correctness check. It establishes that a predicate
+# implements the formalisation it declares.
+#
+# WHAT IT IS NOT, and both matter:
+#   * NOT detector validity. It cannot establish that the formalisation
+#     captures the constraint the benchmark intends. A predicate whose
+#     `formal_statement` is wrong passes its own analytic audit perfectly.
+#   * NOT human validation. No person judged any instance. The original
+#     criterion is retained above, unchanged and unused, for traceability.
+#
+# The non-circularity guarantee is structural: `expected_verdict` is a LITERAL
+# written by the case author, never a value obtained by running the predicate.
+# `derived_from` stores the `formal_statement` the case was derived against, so
+# if that statement changes the case is automatically invalidated rather than
+# silently continuing to pass against new semantics.
+
+
+@dataclass(slots=True)
+class AnalyticAuditCase:
+    """One case whose expected verdict follows from the predicate's own text.
+
+    ``derivation`` is the argument from ``derived_from`` to ``expected_verdict``.
+    It is required and is not decoration: a case nobody can justify from the
+    formal statement is not an analytic case, it is a guess with a literal.
+    """
+
+    case_id: str
+    constraint: Constraint
+    responses: Sequence[CanonicalResponse]
+    expected_verdict: Verdict
+    derivation: str
+    derived_from: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.expected_verdict, Verdict):
+            raise TypeError(
+                f"analytic case {self.case_id}: expected_verdict must be a Verdict"
+            )
+        if not self.derivation.strip():
+            raise ValueError(
+                f"analytic case {self.case_id}: `derivation` is required — a case "
+                "with no argument from the formal statement is not analytic"
+            )
+        if not self.derived_from.strip():
+            raise ValueError(
+                f"analytic case {self.case_id}: `derived_from` must hold the "
+                "predicate's formal_statement, so a change to it invalidates "
+                "this case instead of silently passing"
+            )
+
+
+def run_analytic_audit(
+    predicate: D0Predicate,
+    cases: Sequence[AnalyticAuditCase],
+    kb: KnowledgeBase,
+) -> AuditResult:
+    """Run analytic cases against one predicate.
+
+    Refuses a case derived from a different `formal_statement` than the
+    predicate currently declares — that is the drift guard, and it fires as an
+    error rather than a failed case because a stale derivation is not evidence
+    either way.
+    """
+    result = AuditResult(
+        predicate_name=predicate.predicate_name,
+        schema_id=predicate.schema_id,
+        version=predicate.version,
+        source_sha256=predicate.source_hash(),
+    )
+    for case in cases:
+        if case.derived_from.strip() != predicate.formal_statement.strip():
+            raise ValueError(
+                f"analytic case {case.case_id} was derived from a formal_statement "
+                f"that {predicate.predicate_name} no longer declares. Re-derive the "
+                "case against the current statement; a stale derivation is not "
+                "evidence.\n"
+                f"  case:      {case.derived_from.strip()[:120]!r}\n"
+                f"  predicate: {predicate.formal_statement.strip()[:120]!r}"
+            )
+        if len(case.responses) != 2:
+            raise ValueError(
+                f"analytic case {case.case_id}: a pairwise case needs exactly 2 "
+                f"responses, got {len(case.responses)}"
+            )
+        a, b = case.responses
+        actual = predicate.check_pair(case.constraint, a, b, kb)
+        result.outcomes.append(CaseOutcome(
+            case_id=case.case_id,
+            expected=case.expected_verdict,
+            actual=actual.verdict,
+            passed=actual.verdict is case.expected_verdict,
+            reason=actual.reason,
+        ))
+    return result
+
+
+def mechanism_coverage(registry: object) -> dict[str, object]:
+    """How many DISTINCT pairwise mechanisms the registered predicates have.
+
+    Auditing 28 names is not auditing 28 mechanisms. All 24 `s_c*_0*`
+    predicates — the only ones any test constraint selects — delegate their
+    pairwise verdict to `_SchemaExclusion.check_pair` or
+    `_SchemaAnchor.check_pair`, both of which route through
+    `C1MutualExclusion.check_pair`. Grouping by the bound implementation makes
+    that visible instead of leaving a reader to count names.
+
+    This is the honest denominator for D0AUDIT-A's coverage claim.
+    """
+    names = sorted(registry.names())            # type: ignore[attr-defined]
+    by_impl: dict[str, list[str]] = {}
+    placeholders: list[str] = []
+    for name in names:
+        pred = registry.get(name)               # type: ignore[attr-defined]
+        qual = type(pred).check_pair.__qualname__
+        by_impl.setdefault(qual, []).append(name)
+        if "placeholder" in pred.version.lower() or pred.formal_statement.strip().upper().startswith("PLACEHOLDER"):
+            placeholders.append(name)
+    return {
+        "n_registered_predicates": len(names),
+        "n_distinct_pairwise_implementations": len(by_impl),
+        "predicates_by_implementation": {k: sorted(v) for k, v in sorted(by_impl.items())},
+        "placeholder_predicates": sorted(placeholders),
+        "coverage_caveat": (
+            f"{len(names)} registered predicate(s) share "
+            f"{len(by_impl)} distinct pairwise implementation(s). An audit that "
+            "passes for every NAME audits those implementations, not that many "
+            "independent formalisations."
+        ),
+    }

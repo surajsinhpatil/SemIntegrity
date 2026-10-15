@@ -1368,3 +1368,581 @@ authored`**.
 **0** have a qualifying second source, so 81 remain DRAFT. That is the next
 phase's work, not a construction defect — the mechanism is built, the policy is
 configured, and 5 sources are already frozen and verified against the store.
+
+---
+
+## Q30 — Corroboration is reachable, but Q28's whole-gold-basis rule blocks it, and the propositional check is human
+
+**Status: OPEN — AWAITING RESEARCHER DECISION.** Raised 2026-10-08 after the
+first end-to-end §4.3 corroboration attempt. **No gate was weakened and no
+unverified source was recorded.**
+
+### What was established, by doing it
+
+81 of 132 constraints are `corroboration_required` (28 history domain · 26 C4
+temporal · 10 axis-4 · 9 date answer · 8 axis-6) and **0** have a qualifying
+second source. One cell was taken end to end to find out why.
+
+`K-C4-SCI-11` asserts that the International Prototype Metre defined the metre
+until 1960. The obvious witness is the **BIPM**, the statutory authority for the
+SI and an approved `standards-body` provider on an approved host.
+
+1. **The artefact is retrievable and freezable.** The SI Brochure (9th ed.)
+   fetched through `kb.fetchers.HttpDocumentFetcher`, 3,503,078 bytes,
+   `content_hash 6385c4e1…`, frozen at snapshot `0fc0157c…`, and
+   `CorroborationStore.verify` passes.
+2. **It states the proposition verbatim.** Extracted with `pypdf` (214 pages,
+   565,476 characters), Appendix 1 contains
+   *"11e CGPM, 1960 : redéfinition du mètre au moyen de la radiation du krypton
+   86"* and *"La définition du mètre en vigueur depuis 1889, fondée sur le
+   Prototype international en platine iridié, **est abrogée**."*
+3. **The dated claims cite nobody.** `Q1929537` `P571` and `P576` carry **zero
+   references**, so under the policy an admissible source is an
+   independent-witness for them.
+4. **And yet it does not qualify.** Verdict: **`same-witness`** —
+   *"the Wikidata claim Q11573 P31 cites Q19606873, which the policy records as
+   provider 'standards-body'"*.
+
+### Why, exactly
+
+ADR-0019 classifies a source against the constraint's **whole gold basis**, and
+a same-witness on **any** claim disqualifies it. `K-C4-SCI-11`'s basis includes a
+third, incidental claim — metre (`Q11573`) `P31` → SI base unit — for which
+Wikidata cites **`Q19606873` = the BIPM SI Brochule (8th edition)**, publisher
+BIPM. So BIPM is cited for a claim the constraint happens to rest on, and is
+therefore disqualified from corroborating the 1960 abrogation it is the world
+authority for.
+
+**This is Q28's consequence, now observed rather than predicted.** Under Q28's
+recommended option (c) — promote when every `supports_gold` claim is covered by
+*some* qualifying source — BIPM would qualify for the 1960 claim, and the
+`P31` claim would need its own source. Its other citation, `Q26711930` =
+**ISO 80000-1:2009** (publisher ISO), is not an approved provider.
+
+### Two things fixed in passing (engineering, not methodology)
+
+* **`wikidata_stated_in_qids` is now populated**, with
+  `standards-body: [Q19606873]`. The policy explicitly sanctions this ("a
+  researcher adds an entry here once, per observed 'stated in' item, after
+  checking it"); the item was checked — `P123` publisher → `Q229478` (BIPM),
+  `P953` → bipm.org. Mapping can only move a verdict from `undetermined` to
+  `same-witness`, both of which fail to qualify, so it is strictly more
+  informative and never more permissive.
+* **A shape guard on that map.** Written inverted (`Q19606873: standards-body`)
+  it silently iterated the provider string character by character, so
+  `_known_stated_in()` returned `{'s','t','a','n','d',…}` and every real
+  citation looked unmapped. A map that decides whether a source may corroborate
+  a benchmark fact must fail loudly; it now does, with 4 tests.
+
+### The second blocker: the propositional check is human
+
+`frozen_artifact_suitability` checks retrievability, hash stability, charset and
+document-vs-index. It does **not** check that the document states the
+proposition — Q27 recorded that a 1,039-byte JS shell passed every mechanical
+check "and was caught only by the human propositional check", and the policy
+says "established mechanically where possible; anything subtler is human
+review". Keyword extraction (now demonstrated) narrows a candidate to an exact
+passage but does not establish that the passage asserts the gold proposition.
+
+**So corroboration is genuinely coupled to the human phase**, which the
+professor has placed last. That is a sequencing fact, not a weakened gate.
+
+### Options
+
+**(a) Resolve Q28 to per-claim classification (its own recommendation (c)).**
+One validator change, no policy change. Makes BIPM qualify for the claim it
+actually witnesses. Each remaining `supports_gold` claim then needs its own
+qualifying source — which is the honest cost, and is what §4.3 arguably always
+meant. **Recommended.**
+
+**(b) Add ISO as an approved provider.** An ADR-0019 change. Unblocks the `P31`
+claim specifically. Should be decided on ISO's independence from Wikidata, not
+on convenience.
+
+**(c) Narrow the gold basis of affected constraints** by dropping incidental
+evidence checks so they stop attracting citations. **Rejected as stated** — it
+weakens evidence to pass a gate, which is exactly backwards.
+
+**(d) Defer all 81 to the human phase.** Honest, and the current state. The
+artefacts can be fetched, frozen and passage-located now, and confirmed by a
+human later, so the work is not wasted.
+
+### Current recorded state
+
+**No corroborating source is attached to any of the 81.** The BIPM artefact is
+frozen in the store and its passage located, ready for whichever option is
+taken. The 5 sources that *are* attached (on `F-BIO-15` C1/C2/C3) are ADR-0022
+**measure provenance** and are explicitly **not** §4.3 corroboration; those
+three cells do not require it.
+
+---
+
+## Q31 — The entity/date fall-through question is now LIVE, and it decides whether Mistral is in the study
+
+**Status: OPEN — AWAITING RESEARCHER DECISION.** Raised 2026-10-15 from the
+first real primary run. **Nothing was changed in response; CANON is FROZEN.**
+
+### What was observed
+
+First primary run over the frozen 120, three models, 960 probes each:
+
+| model | canonicalisation rate | CANON gate (>=95%) |
+|---|---|---|
+| Qwen2.5-3B-Instruct | 98.65% | PASS |
+| Qwen2.5-7B-Instruct | 99.17% | PASS |
+| **Mistral-7B-Instruct-v0.3** | **63.02%** | **FAIL** |
+
+Mistral's failure is **structural, not noise**, and it is entirely explained by
+one probe factor:
+
+```
+syntax=declarative      2 / 320    0.6%  INVALID
+syntax=cloze          165 / 320   51.6%  INVALID
+syntax=interrogative  188 / 320   58.8%  INVALID
+```
+
+The mechanism, from `scripts/analysis/inspect_stage0.py`:
+
+```
+asked : Is it false that the type species of the genus Felis is Felis catus?
+said  : ' Felis catus'
+why   : polar probe (negated) answered with no recognisable YES/NO
+```
+
+Mistral answers a **polar** probe by naming an **answer-space member** instead
+of YES/NO. Canonicaliser v1.1 is strict and discards that as INVALID.
+
+### Why this matters beyond Mistral
+
+**This is exactly the open question the project recorded as having no live
+instance.** `docs/RESULTS_STATUS.md` states that after the Variant A rewrite
+the pilot reached 0 INVALID, so "the entity/date fall-through question
+(HANDOFF decision 2) has **no live instance in this dataset**. It stays OPEN and
+undecided." `docs/Q21_polarity_mapping_spec.md` §7 describes the single pilot
+instance — `K-C1-GEO-01-P06`, answered `'Melbourne'` — as "an answer-space
+member given to a *polar* probe, which the strict rule discards rather than
+reading as a contradiction", and labels the fall-through rule "an open,
+undecided option".
+
+**There are now ~355 live instances.** The question can be decided on evidence
+for the first time.
+
+A second finding is implicit and arguably more important for the paper: **the
+CANON gate was frozen on ONE model** (Qwen2.5-3B, 12 pilot constraints, 100%).
+A different model family fails it at 63%. Whether CANON measures *response
+canonicalisability in general* or *Qwen-shaped output* is now an open empirical
+question, and the answer bears on every model still to be run.
+
+### Options
+
+**(a) Keep the strict rule; report Mistral as CANON-FAIL and exclude its scores.**
+Defensible and already the rule. Cost: a whole model family drops out, and the
+exclusion is arguably an artefact of a gate tuned on one model.
+
+**(b) Adopt the entity/date fall-through rule.** On a polar probe, an
+answer-space member is read as the assertion it names rather than discarded.
+Q21 §7 simulated this on the pilot: 94.8% vs 93.75%, 27 responses recovered.
+Cost: **CANON is FROZEN and this modifies the canonicaliser.** It would require
+unfreezing, re-running the CANON gate on the pilot, and re-canonicalising every
+model already run — including the two Qwens, whose numbers would change.
+
+**(c) Treat it as a model-level instruction-following result.** Mistral's
+failure to emit YES/NO on polar probes is a real, measurable property, reported
+as such rather than as a pipeline defect. Compatible with (a).
+
+**Recommended: (a) + (c) for this run, and decide (b) deliberately before the
+freeze**, with the fall-through question resolved on the Mistral data rather
+than on the single pilot instance. Adopting (b) mid-study would invalidate
+already-collected numbers; adopting it never leaves a known artefact in place.
+**Not implemented either way.**
+
+### What is NOT affected
+
+The confirmatory contrast is unchanged and consistent across all three models
+(C1+C2 vs C3+C4, negative in every case, interval excluding zero). Mistral's
+estimate is **not reportable** because its gate failed, but the two Qwens'
+are diagnostic-quality and agree in direction.
+
+
+### Q31 — UPDATE 2026-10-15: OLMo-2 passes, so the gate is NOT Qwen-shaped
+
+The full five-model primary run settles the second-order worry raised above.
+
+| model | family | canonicalisation | CANON (>=95%) |
+|---|---|---|---|
+| Qwen2.5-7B | qwen | 99.17% | PASS |
+| Qwen2.5-14B | qwen | 99.06% | PASS |
+| Qwen2.5-3B | qwen | 98.65% | PASS |
+| **OLMo-2-7B** | **olmo** | **97.29%** | **PASS** |
+| Mistral-7B-v0.3 | mistral | **63.02%** | **FAIL** |
+
+**A second non-Qwen family clears the gate comfortably.** The concern that CANON
+might measure "Qwen-shaped output" because it was frozen on one Qwen model is
+therefore NOT supported: an AI2-lineage model at a different scale, different
+tokenizer and different pretraining corpus canonicalises at 97.3%.
+
+That makes Mistral's 63% a **property of Mistral**, not an artefact of the gate.
+It answers polar probes by naming an answer-space member instead of YES/NO, on
+51.6% of cloze and 58.8% of interrogative probes, while declarative probes fail
+at 0.6%.
+
+**This strengthens recommendation (a)+(c) and weakens (b).** Adopting the
+entity/date fall-through rule would now be changing a frozen canonicaliser to
+accommodate one model of five, when the other four comply — and it would alter
+numbers already collected for all of them. The question of whether to adopt it
+is still open and still worth deciding deliberately before freeze, but it should
+be decided as a question about *what Stage 0 ought to mean*, not as a repair.
+
+**Unchanged:** Mistral's PSCR values remain NOT reportable, and its 355 INVALID
+responses remain the first live dataset for deciding the fall-through rule.
+
+---
+
+## Q32 — The D3 judge prompt was never rendered through phi-4's chat template
+
+**Status: FIXED AS ENGINEERING — two sub-decisions await the researcher.**
+Raised 2026-10-15 from the archive of D3 job 15127.
+
+### What was observed
+
+`results/detectors/d3/raw/Qwen__Qwen2.5-3B-Instruct.jsonl`, inspected by the
+researcher on the cluster, contains:
+
+* rows with `raw_output: ''` and `parse_error: "no JSON object found in judge
+  output"` — the judge generated **nothing**;
+* parsed rows whose output begins `- [Response]: {"label": "CONTRADICTION", ...` —
+  the judge invented transcript scaffolding around its answer.
+
+### Diagnosis
+
+Both are the signature of an instruction-tuned model handed a **bare** prompt.
+`run_d3_judge.py::_generate` passed the filled `d3_prompt.txt` string straight
+to `backend.generate`, and `VLLMBackend.generate` passes prompts
+unchanged to `self._llm.generate()`. **No chat template was applied anywhere in
+the D3 path.** phi-4 therefore ran as a *completion* model: it continued the
+document rather than answering as an assistant, and for prompts that read as an
+already-finished document it emitted EOS immediately.
+
+§4.6 already requires the opposite, and `inference/chat_template.py` quotes it:
+"Each model uses its own official chat template while the semantic instruction
+is held constant, and the fully rendered prompt string is logged for every
+response." The **primary** inference runner has always done this — the measured
+`cd8e9439…` template hash is evidence of it. Only this driver did not.
+
+### Consequence for the NONDEGEN criterion
+
+`parse_failure_rate` over that archive measures *the harness*, not the judge.
+Read as-is it would have supported the false conclusion "phi-4 is a poor
+structured-output judge". **No D3 number from job 15127 is reportable**, and the
+NONDEGEN go/no-go criterion cannot be evaluated against it.
+
+### What was changed (engineering, under §4.6)
+
+1. `_generate` renders each prompt through the judge's own template via
+   `tokenizer.apply_chat_template`, and `chat_template_hash` **raises** if the
+   judge has no official template rather than substituting a generic one.
+2. Decoding now comes from `configs/models/_judge.yaml:protocol.decoding`
+   instead of literals. **The configured `seed: 20250058` was previously
+   dropped**, so no judging run was reproducible even though the config pinned
+   one.
+3. Every archived row records `judge_chat_template_hash`. A resume against an
+   archive whose rows lack it, or whose hash differs, is **refused** — an
+   archive must not become a mixture of two renderings. `--summary-only` is
+   exempt, because summarising a known-bad archive is how its damage is measured.
+4. The summary separates `n_empty_raw_output` from `parse_failure_rate`, so a
+   serving failure can never again be read as judge indecision.
+
+Seven tests pin this, including one asserting the configured seed is really
+pinned so the others cannot pass vacuously.
+
+### THE TWO SUB-DECISIONS — RESEARCHER'S, NOT MINE
+
+**(a) Does re-rendering touch the prompt freeze?** `d3_llm_judge.yaml` sets
+`prompt_frozen_before: test_evaluation`. The prompt **text** is byte-identical —
+`d3_prompt.txt` is unmodified and goes in whole — and only the model's own turn
+markers are added around it. I treated that as *rendering*, which §4.6 mandates,
+rather than a change to a frozen artefact. If you read the freeze as covering the
+rendered string, then this is a pre-freeze amendment and should be recorded as one.
+
+**(b) One user turn, or system + user?** The prompt is a single block containing
+both the instruction and the two statements. I render it as **exactly one user
+turn, no system role**, because splitting it would change the frozen delivery and
+because `_judge.yaml` declares no `supports_system_role` for the judge. Splitting
+the instruction into a system turn is plausibly better for adherence and is the
+shape the primary runner uses for evaluated models — but it is a change to how a
+frozen prompt is delivered, so it is not taken here.
+
+### Consequence for the existing archive
+
+The qwen25-3b archive must be **moved aside, not resumed into**. The driver now
+refuses it by name and prints the `mv` command. Judging that model again is ~2
+min of A100 time, so nothing material is lost.
+
+### QUANTIFIED 2026-10-15 — the whole 15127 archive is unusable
+
+`--summary-only` over the pre-fix archive, researcher-run on the cluster and
+pasted into the session:
+
+```
+2325 of 2325 judgement(s) with no judge_chat_template_hash
+constraints: 0 pending of 120
+labels: {'None': 2305, 'CONTRADICTION': 19, 'COMPATIBLE': 1}
+coverage 0.005952380952380952   parse_failure_rate 0.9913978494623656
+```
+
+**parse_failure_rate = 99.14%.** Untemplated phi-4 produced parseable JSON in
+**20 of 2,325** attempts. Coverage against the 3,360 possible pairs is **0.6%**.
+
+This settles the diagnosis beyond argument. A 99% parse failure rate is not a
+judge that adheres poorly to a structured-output schema; it is a model that was
+never asked in its own input format. **Every figure from job 15127 is void**, and
+`2325 of 2325` confirms the archive is uniformly pre-fix with no salvageable
+partition.
+
+**The 19:1 CONTRADICTION:COMPATIBLE split among the 20 that parsed must not be
+read as near-degenerate labelling.** n=20, non-randomly selected (they are the
+prompts that happened to survive completion mode), and NONDEGEN is a criterion
+about a judge's label distribution over a proper run. It remains **unevaluated**.
+
+### One fact from that run DOES survive, because it is not about the judge
+
+`constraints: 0 pending of 120` with 2,325 archived means every *judgeable* pair
+was attempted: **2,325 of 3,360 pairs (69.2%) are judgeable for qwen25-3b**, and
+1,035 are not because at least one response canonicalised to something other
+than ANSWER/NEGATED. That figure comes from Stage 0 and `render_claim`, not from
+phi-4, so the templating defect does not touch it. It also confirms the identity
+predicted from the code — D3's judgeable set is exactly D1's evaluable set, since
+`render_claim`'s None-set is `NON_EVALUABLE_LABELS` — which gives the detector
+agreement work a free integrity check on every future judge archive.
+
+### RESOLVED — the fix is verified on real phi-4, job 15140
+
+Job 15140, `COMPLETED 0:0`, 00:04:22 on csis.cn1, researcher-run and pasted:
+
+```
+wrote 2325 new judgement(s) -> results/detectors/d3/raw/Qwen__Qwen2.5-3B-Instruct.jsonl
+labels: {'CONTRADICTION': 1017, 'COMPATIBLE': 1308}
+coverage 0.6919642857142857   parse_failure_rate 0.0
+```
+
+| quantity | job 15127 (untemplated) | job 15140 (templated) |
+|---|---|---|
+| parse_failure_rate | **0.9914** | **0.0** |
+| judgements parsed | 20 / 2,325 | **2,325 / 2,325** |
+| coverage (of 3,360 pairs) | 0.0060 | **0.6920** |
+| labels | None 2305 · CONTR 19 · COMP 1 | CONTR 1017 · COMP 1308 |
+
+Coverage is now at its **ceiling**: 0.6920 = 2,325/3,360, i.e. every judgeable
+pair received a decision and the only uncovered pairs are those where a response
+makes no claim. There are **zero UNCLEAR** labels and zero parse errors.
+
+**Q32 is closed as an engineering defect, correctly diagnosed and fixed.** The
+two sub-decisions above — whether re-rendering touches the prompt freeze, and
+one user turn versus system+user — remain the researcher's and are unaffected by
+this result: both readings produce a working judge, so the choice is about what
+the freeze means, not about whether the judge functions.
+
+### NONDEGEN — what this does and does NOT establish
+
+The label distribution is **1017 : 1308 (43.7% / 56.3%)**, so the *all-one-label*
+failure mode is cleared decisively.
+
+**That is not the same as the NONDEGEN criterion passing.** `_judge.yaml` states
+it as "dev-split **judge-vs-human** agreement must be non-degenerate", and no
+human labels exist. A balanced label distribution is a *necessary* condition that
+is now met; the criterion as written needs annotators and remains **BLOCKED on
+human validation**. NONDEGEN must not be marked PASS on the strength of a
+marginal distribution.
+
+### A trap for the detector-agreement work that follows
+
+D3 judged **1017/2325 = 0.4374** of judgeable pairs CONTRADICTION. The mean of
+qwen25-3b's four per-class D1 PSCR values is **≈0.444**. These are close, and
+that closeness means **nothing about agreement**: two detectors with identical
+marginals can disagree on every single pair. The §4.8.2 result is per-pair
+concordance, computed pair-by-pair over the joint-coverage set, and it must not
+be inferred from matching rates.
+
+
+---
+
+## Q5 — RESOLVED 2026-10-15 by ADR-0024
+
+`D4 distribution_construction` is fixed at `p_i = softmax_i(mean_token_logprob_i / T)`
+with **`T = 1` frozen as primary** and `T ∈ {0.5, 1, 2, 4}` reported as an
+exploratory sensitivity band. `T = 1` is the only value §4.8.6's text determines.
+ADR-0016 is SUPERSEDED. D4 moves from BLOCKED to **PENDING one GPU run**; the
+blocker was the decision, what remains is compute. JSD values stay comparable
+only within a single `T`, and D4 remains EXPLORATORY and exposes no verdict.
+
+---
+
+## Q31 — SETTLED 2026-10-15 BY ARITHMETIC (not by decision)
+
+Q31 asked whether the entity/date fall-through rule should be adopted, and
+framed that as the decision determining whether Mistral is in the study.
+**It is not that decision, and cannot be.**
+
+Measured by `scripts/analysis/classify_invalid.py` over all five models:
+Mistral has **71** `POLAR_ENTITY_DATE_MEMBER` cases of 355 INVALID. Recovering
+**every one of them** yields a CANON ceiling of **0.7042** — an upper bound, not
+a correction — still far below the frozen >=0.95 gate. No entity/date
+fall-through rule rescues Mistral.
+
+**Q31's characterisation of the failure was also wrong.** It describes Mistral
+as answering polar probes by naming an answer-space member: that is 98 of 355
+(27.6%, and only 71 of those are the entity/date case — the other 27 are the
+canonicaliser's deliberate boolean anti-bypass guard, a different thing). The
+dominant mode is **244 of 355 (68.7%)**, answered with neither a yes/no nor a
+space member.
+
+**The sharpest result:** Mistral's out-of-space count is **13, identical to
+Qwen2.5-3B's 13**. Its failure is **format compliance, not knowledge** — 342 of
+355 (96.3%) are polar-format failures.
+
+**What remains open** is the narrow, original question: what *ought* Stage 0 to
+mean when a polar probe is answered with an answer-space member? That is now
+decidable on its merits, with no model's inclusion resting on it. CANON and the
+canonicaliser remain FROZEN. See ADR-0023 D8.
+
+---
+
+## Q11 — MOOT 2026-10-15
+
+A numeric IAA threshold is no longer needed: **IAA is removed** by ADR-0023 D5.
+With no annotators there is no agreement to measure, and it is *not* replaced by
+inter-detector agreement — D0 and D1 share their pairwise implementation, so
+their concordance is near-tautological.
+
+---
+
+## Q33 — Does the polar-cloze probe pathology affect the measurement? RESOLVED
+
+**Raised 2026-10-15 from the PROBE-C audit (ADR-0023 D2). Measured, not
+speculative, but its consequence is unquantified.**
+
+`semintegrity.probes.pathology` run over the frozen test split flags **43 of 960
+probes (4.5%)** as `POLAR_CLOZE_STEM_EMBEDS_GOLD_ANSWER` — a polar cloze whose
+own text contains the gold answer, so the blank invites completion from the
+embedded answer rather than a yes/no. They are confined to **three factor cells:
+04 (16), 06 (11), 07 (16)**.
+
+**Cells 04 and 07 are exactly the cells observed failing** in the Qwen2.5-14B,
+OLMo-2 and Mistral diagnostics, which is why the concentration matters. And
+`K-C1-HIS-16-P04` fails identically in two different model families — a probe
+property, not a model property.
+
+**A first version of this check was wrong and is recorded so it is not
+repeated.** Flagging any polar probe containing the gold answer caught **362 of
+960 (37.7%) spread evenly across all eight cells**, because a polar question
+*must* state the proposition it asks about. `cloze` is the load-bearing
+condition: an interrogative cues a yes/no by its form, a blank does not.
+
+**What is NOT established.** This does **not** explain Mistral's CANON failure —
+its 71 entity/date cases span **P02–P08**, not just the three flagged cells.
+And the 43 probes are a property of the frozen benchmark, so the question is
+what to *report*, not what to change.
+
+**THE OPEN QUESTION, for the researcher.** 43 of 960 probes have a structural
+feature that plausibly depresses canonicalisation for every model. Options:
+(a) report as a limitation and leave the benchmark untouched; (b) add a
+prespecified sensitivity analysis excluding the 43 and report both;
+(c) something else. **(b) is my recommendation** — it costs no new data and
+bounds the effect — but the benchmark is frozen and excluding probes changes the
+K=8 design per constraint, so it is a design decision and not mine. No probe has
+been rewritten or discarded.
+
+
+### Q33 AUDIT COMPLETE — 2026-10-15
+
+The 43 flagged probes were inspected individually. Findings:
+
+**They are not defective probes. They are an unavoidable form.** Every one is a
+polar cloze on an entity or date constraint, e.g.
+
+```
+K-C1-GEO-13-P04  gold='Kanagawa Prefecture'  expected='YES'
+  The statement "Kanagawa Prefecture is the prefecture of Yokohama" is ___.
+```
+
+To ask whether a proposition holds you must state it, and stating it names the
+answer. So the gold answer's presence is **necessary**, not a mistake. What is
+specific to the cloze form is that a blank does not say what kind of token
+belongs in it, where an interrogative cues yes/no by its syntax.
+
+**Composition, measured:** 27 of 120 constraints affected; 11 lose one probe and
+16 lose two; **no constraint falls below K=6**; 285 of 3,360 pairs (8.5%) would
+be lost. By class: C1 22, C4 21 — zero in C2/C3, which are entirely boolean.
+
+**An alternative predicate was tested and is equivalent.** "Contains the gold
+answer" and "contains ANY answer-space member" flag **exactly the same 43**:
+this benchmark has no distractor-embedding polar cloze, and the other 17
+entity/date polar clozes contain no answer-space member at all. The narrower
+predicate is therefore not a restriction, and the question is closed by
+measurement rather than assumption.
+
+**Empirical impact on the CANON-passing models is small.** Their entity/date
+fall-through cases total **7** (Qwen2.5-14B 3, OLMo-2 4), all in flagged cells —
+about 4% of the flagged probe-responses, and 0.18% of their 3,840 responses.
+**Mistral is unaffected by this explanation**, its 71 cases spanning P02–P08.
+
+### S4 IS IMPLEMENTED, AND IS DEFENSIBLE. K=8 REMAINS PRIMARY.
+
+`analysis.sensitivity.s4_probe_exclusion` plus its plan function. It is
+defensible for one specific reason worth stating:
+
+> **The exclusion criterion is response-independent.** PROBE-C flags a probe on
+> its *text*, with no reference to any model's reply. Excluding on an outcome —
+> "probes that went INVALID" — would be selection on the dependent variable and
+> would bias PSCR by construction. Excluding on text does not.
+
+Its cost is reported rather than hidden: dropping probes breaks the ADR-0003
+within-constraint factor balance for the 27 affected constraints and reduces
+their pair counts, widening their per-constraint PSCR. The constraint remains
+the bootstrap unit, so the interval absorbs this. S4 carries
+`is_primary: False` structurally and an interpretation limit stating that a
+non-zero estimate shows PSCR *depends* on the probe type without establishing
+which figure is correct.
+
+### THE ONE DECISION STILL YOURS
+
+S4 is implemented and will run on the existing responses with no GPU. What
+remains is **whether its result is reported in the dissertation**:
+
+* **(a) report S4 alongside the primary** — my recommendation. It costs nothing,
+  it bounds the effect, and declaring it secondary in advance is cleaner than
+  being asked about it at the viva with no answer.
+* **(b) report the pathology as a limitation only**, without the S4 number.
+  Defensible if you judge a secondary PSCR figure more confusing than helpful.
+
+**No probe has been rewritten, discarded or reordered, and the benchmark is
+unchanged.** Either option is available from the artifacts; nothing is
+foreclosed.
+
+
+### Q33 RESOLVED — 2026-10-15
+
+**The researcher chose option (a): report S4 as a secondary sensitivity analysis
+alongside the unchanged K=8 primary results.** Implemented and measured.
+
+**S4, four models, paired over the identical constraints:** -0.0030
+(-0.0087, +0.0034) · -0.0022 (-0.0047, -0.0001) · +0.0066 (-0.0006, +0.0145) ·
++0.0052 (-0.0018, +0.0139). Magnitudes of 0.002-0.007 are **one to two orders of
+magnitude below H1_primary's 0.090-0.182**, and the signs are mixed. One of four
+intervals excludes zero at an estimate of -0.0022; with four comparisons, mixed
+signs and no multiplicity correction, that is consistent with noise and is not
+reported as an effect.
+
+**The 43 flagged probes do not materially affect the primary metric.** K=8
+remains the primary design, no probe was rewritten, discarded or reordered, and
+the finding is reported as a limitation with its effect bounded rather than as a
+defect to be repaired.
+
+**One consequence worth recording.** The `PROBE-C` gate originally required ZERO
+pathology findings. That was never achievable — the benchmark is FROZEN, and
+these 43 probes are polar clozes whose statement necessarily names the gold
+answer, which is a property of the probe FORM rather than a defect in any probe.
+The criterion was therefore revised to require findings to be **quantified and
+their effect bounded**, which S4 satisfies. Revising a gate after seeing data is
+a researcher degree of freedom and is recorded as one in
+`configs/inference/pilot.yaml` under `criterion_revised_2026_10_15`.

@@ -2,7 +2,7 @@
 
 **Kind:** METHODOLOGY
 
-**Status:** OPEN — AWAITING RESEARCHER DECISION
+**Status:** **SUPERSEDED BY ADR-0024, 2026-10-15** — resolved as option A (`T = 1`) frozen as primary, with option C's band `T in {0.5, 1, 2, 4}` reported as sensitivity. Q5 is RESOLVED. The analysis below stands as the reasoning that led there.
 **Date:** 2026-09-26
 **Relates to:** Q5 · `configs/detectors/d4_distributional.yaml`
 

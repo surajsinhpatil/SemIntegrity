@@ -1,5 +1,62 @@
 # PROJECT_STATUS
 
+> ## CURRENT STATE — 2026-10-15 (supersedes every block below)
+>
+> **Phase:** redesigned to require **no human annotation or validation**
+> (researcher decision 2026-10-15, with professor's permission). Audit,
+> methodology, implementation and all approved measurement runs are **complete**.
+>
+> | | |
+> |---|---|
+> | Governing decisions | **ADR-0023** (partially approved 2026-10-15) · **ADR-0024** (approved 2026-10-15) |
+> | Methodology | `docs/METHODOLOGY_REVISED.md` · audit: `docs/AUDIT_2026-10-15_no_human_validation.md` |
+> | Benchmark | **unchanged** — 132/132, 1,056 probes, Revision 6. 51 EVIDENCE_VERIFIED · **81 DRAFT** |
+> | Probes | all 1,056 `draft`; human PROBE never exercised, replaced by **PROBE-C** |
+> | Primary run | **4,800 responses** (5 models x 960). MEASURED |
+> | CANON | 4 PASS (0.9729-0.9917) · **Mistral 0.6302 FAIL**, retained as FAIL. Threshold **0.95, unchanged** |
+> | D0 / D1 | RUN. **Not independent of each other** (shared pairwise implementation) |
+> | D2 | **RUN, 5/5 models.** Score only, no verdict. Concordance vs D1 = **1.0000** — see ADR-0023 **D6a** |
+> | D3 | **RUN, 4/5 models**, 9,359 judgements, parse-failure 0.0. Mistral excluded by decision |
+> | D4 | **RUN, 1/5 models** (qwen25-3b). EXPLORATORY. Other four excluded by decision |
+> | Agreement | MEASURED. **No pair of D0/D1/D2/D3 is independent, by construction** |
+> | Sensitivity | **S1-S4 MEASURED, 4 models.** H1 on the verified subset is IMPOSSIBLE (zero C4) |
+> | Validation | **1,273 passed / 1 skipped** · ruff clean · mypy 13 (baseline) · `make check` PASS |
+> | Readiness | **16 PASS · 1 FAIL · 1 BLOCKED · 1 REMOVED** — FAIL is GPU storage quota (19 GB headroom) |
+>
+> ### The three results that matter
+>
+> 1. **H1_primary holds**: negative with a CI excluding zero in all five models;
+>    chance-balanced by construction (both arms 0.5556, gap 0.0000).
+> 2. **No detector corroborates another.** D2-vs-D1 rank concordance is 1.0000 in
+>    all five models because `render_claim` hands every detector claims that
+>    differ in one slot or are byte-identical. §4.8.2's anticipated
+>    detector-disagreement result **does not exist**.
+> 3. **Provisional ground truth does not detectably bias the findings.** S1's
+>    eight intervals all span zero; S3's negative direction reproduces on
+>    machine-verified constraints under an adverse chance bias. A bound, not an
+>    exclusion — n is 16/14 per class.
+>
+> **REMOVED FROM THE DESIGN, permanently:** detector precision/recall/F1/AUPRC,
+> inter-annotator agreement, Krippendorff α, adjudication, human-validated ground
+> truth, probe equivalence as a *validated* finding, D0's measured error rate.
+> `VerificationStatus.HUMAN_VALIDATED` is **unreachable by design**.
+>
+> **Status labels remain strict.** Nothing is `HUMAN_VALIDATED`. Nothing is
+> `FROZEN` except CANON (2026-10-07) and the pilot probes. `EVIDENCE_VERIFIED`
+> means machine-checked against the frozen KB, **never** human-reviewed.
+>
+> **Open, researcher's call:** a third evaluated family (cross-family
+> generalisation currently rests on one OLMo-2-vs-Qwen comparison) · D4 on the
+> remaining four models · the `_judge.yaml` NONDEGEN amendment · Mistral D3.
+>
+> **Read next:** `docs/RESULTS_STATUS.md` →
+> `docs/decisions/ADR-0023-no-human-validation-redesign.md` →
+> `docs/METHODOLOGY_REVISED.md` → `docs/OPEN_QUESTIONS.md`.
+
+---
+
+# PROJECT_STATUS (historical board, from 2026-10-06)
+
 **Project:** SemIntegrity — Measuring Semantic Self-Inconsistency in LLMs Across Structured Integrity Constraints
 **Last updated:** 2026-10-06 (design-resolution session)
 **Current phase:** Phases −1/0/1/2 complete · Phase 3 pilot run twice · **Phase 5 design DECIDED, authoring NOT STARTED**

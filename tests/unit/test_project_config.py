@@ -75,15 +75,18 @@ def test_d4_is_never_a_detector(cfg):
     assert "NOT a contradiction detector" in cfg["detectors"]["d4_disclaimer"]
 
 
-def test_seven_models_are_configured():
+def test_five_models_are_configured():
     from semintegrity.utils.paths import p
 
     names = sorted(f.stem for f in p("configs/models").glob("*.yaml") if not f.stem.startswith("_"))
-    assert len(names) == 7
+    assert len(names) == 5
     families = set()
     for n in names:
         families.add(load_config(f"configs/models/{n}.yaml").data["family"])
-    assert families == {"llama", "mistral", "qwen", "gemma"}
+    # Roster reduced 2026-10-15: llama and gemma retired, olmo added.
+    # Three families now — qwen carries the within-family scale axis
+    # (3B/7B/14B), mistral and olmo provide cross-family contrast.
+    assert families == {"qwen", "mistral", "olmo"}
 
 
 def test_no_model_revision_is_fabricated():
@@ -147,6 +150,18 @@ def test_no_hand_written_revision_hashes_in_docs():
             if isinstance(value, str):
                 pinned.add(value)
 
+    # DETECTOR configs can pin a revision too, which became true on 2026-10-15
+    # when D2's NLI checkpoint was pinned in configs/detectors/d2_nli.yaml
+    # (ADR-0023 D6). Scanning only configs/models/ left a blind spot: a
+    # genuinely resolved hash looked fabricated. This WIDENS where a hash may be
+    # pinned, it does NOT relax the rule — a SHA in the docs must still match a
+    # revision some config actually carries.
+    for f in p("configs/detectors").glob("*.yaml"):
+        cfg = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        for block in cfg.values():
+            if isinstance(block, dict) and isinstance(block.get("revision"), str):
+                pinned.add(block["revision"])
+
     offenders = []
     for doc in p("docs").rglob("*.md"):
         for m in re.finditer(r"\b[0-9a-f]{40}\b", doc.read_text(encoding="utf-8")):
@@ -163,7 +178,7 @@ def test_no_source_directory_is_hidden_by_gitignore():
 
     Regression test for a real bug: an unanchored `models/` rule in .gitignore,
     meant to keep model weights out of the repository, also matched
-    `configs/models/` and `scripts/models/`. All seven model configs — including
+    `configs/models/` and `scripts/models/`. All five model configs — including
     the pinned revisions — were silently untracked for several commits. A rule
     intended to exclude weights was excluding source instead.
     """
@@ -219,7 +234,7 @@ def test_inference_backend_matches_adr_0013():
     from semintegrity.utils.paths import p
 
     names = sorted(f.stem for f in p("configs/models").glob("*.yaml") if not f.stem.startswith("_"))
-    assert len(names) == 7
+    assert len(names) == 5
 
     backends = {n: resolve_model_config(n).data["backend"] for n in names}
     assert len(set(backends.values())) == 1, (
@@ -293,7 +308,7 @@ def test_serving_config_actually_reaches_the_vllm_backend():
     from semintegrity.inference.backend import VLLMBackend, serving_kwargs
     from semintegrity.utils.config import resolve_model_config
 
-    for name in ("qwen25-3b", "llama33-70b"):
+    for name in ("qwen25-3b", "qwen25-14b"):
         cfg = resolve_model_config(name).data
         kwargs = serving_kwargs(cfg, "vllm")
         assert kwargs["tensor_parallel_size"] == cfg["serving"]["tensor_parallel_size"]
@@ -304,9 +319,22 @@ def test_serving_config_actually_reaches_the_vllm_backend():
         accepted = set(inspect.signature(VLLMBackend.__init__).parameters) - {"self"}
         assert set(kwargs) <= accepted, f"unknown kwargs: {set(kwargs) - accepted}"
 
-    # The 70B is the case that matters: tp=2 must survive the round trip.
-    assert serving_kwargs(resolve_model_config("llama33-70b").data, "vllm")[
-        "tensor_parallel_size"] == 2
+    # A tp>1 config must survive the round trip. llama33-70b was that case
+    # until it was retired on 2026-10-15 (141 GB of weights against ~52 GB of
+    # quota), and no roster model declares tp>1 any more -- so the override path
+    # is exercised against the retired config, which still declares tp=2. Losing
+    # this assertion with the model would quietly drop coverage of the exact bug
+    # this test was written for.
+    import yaml
+
+    from semintegrity.utils.paths import project_root
+
+    retired = yaml.safe_load(
+        (project_root() / "configs/models/retired/llama33-70b.yaml").read_text()
+    )
+    assert retired["serving"]["tensor_parallel_size"] == 2
+    merged = {**resolve_model_config("qwen25-14b").data, "serving": retired["serving"]}
+    assert serving_kwargs(merged, "vllm")["tensor_parallel_size"] == 2
 
 
 def test_both_entry_points_build_backend_args_the_same_way():
@@ -321,3 +349,63 @@ def test_both_entry_points_build_backend_args_the_same_way():
         assert "max_model_len=cfg.data" not in text, (
             f"{module} still hand-builds backend arguments"
         )
+
+
+def test_cluster_yaml_has_no_duplicate_keys():
+    """A duplicated YAML key silently keeps the LAST value.
+
+    On 2026-10-15 an edit added `time: "01:30:00"` to resource_plan.small_models
+    while a stale `time: "04:00:00"` remained below it; yaml.safe_load returned
+    the stale one, so the config said 4 h while the sbatch said 1 h 30. A
+    resource plan that disagrees with the job script is worse than none.
+    """
+    import yaml
+
+    from semintegrity.utils.paths import project_root
+
+    class _StrictLoader(yaml.SafeLoader):
+        pass
+
+    def _no_dupes(loader, node, deep=False):
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise AssertionError(f"duplicate key {key!r} in configs/cluster/cluster.yaml")
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+    _StrictLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dupes
+    )
+    text = (project_root() / "configs" / "cluster" / "cluster.yaml").read_text()
+    yaml.load(text, Loader=_StrictLoader)
+
+
+def test_readiness_audit_model_count_matches_the_actual_roster():
+    """The count CHECK and its MESSAGE must agree.
+
+    A 2026-10-15 edit changed the failure text from "expected 7" to
+    "expected 5" but left the condition at `!= 7`, so the audit reported the
+    self-contradictory "expected 5 models, found 5". A gate whose message
+    disagrees with its own test is worse than no gate.
+    """
+    import re
+
+    from semintegrity.utils.paths import project_root
+
+    src = (project_root() / "scripts/audit_benchmark_readiness.py").read_text()
+    condition = re.search(r"if len\(names\) != (\d+):", src)
+    message = re.search(r"expected (\d+) models, found", src)
+    assert condition and message
+    assert condition.group(1) == message.group(1), (
+        f"condition checks {condition.group(1)} but the message says "
+        f"{message.group(1)}"
+    )
+    roster = sorted(
+        f.stem for f in (project_root() / "configs/models").glob("*.yaml")
+        if not f.stem.startswith("_")
+    )
+    assert int(condition.group(1)) == len(roster), (
+        f"audit expects {condition.group(1)} models; roster has {len(roster)}: {roster}"
+    )

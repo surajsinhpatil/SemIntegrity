@@ -23,6 +23,9 @@ import yaml
 from semintegrity.utils.paths import p, project_root
 
 PASS, FAIL, BLOCKED = "PASS", "FAIL", "BLOCKED"
+#: A precondition WITHDRAWN from the design. Distinct from PASS (nothing
+#: was satisfied) and from BLOCKED (nothing is pending). ADR-0023.
+REMOVED = "REMOVED"
 
 
 @dataclass
@@ -44,11 +47,11 @@ def check_model_revisions() -> Check:
         rev = _yaml(f"configs/models/{n}.yaml").get("revision")
         if not (isinstance(rev, str) and re.fullmatch(r"[0-9a-f]{40}", rev)):
             unpinned.append(f"{n}={rev!r}")
-    if len(names) != 7:
-        return Check("model revisions pinned", FAIL, f"expected 7 models, found {len(names)}")
+    if len(names) != 5:
+        return Check("model revisions pinned", FAIL, f"expected 5 models, found {len(names)}")
     if unpinned:
         return Check("model revisions pinned", FAIL, f"unpinned: {unpinned}")
-    return Check("model revisions pinned", PASS, "all 7 pinned to 40-hex SHAs")
+    return Check("model revisions pinned", PASS, "all 5 pinned to 40-hex SHAs")
 
 
 def check_vllm_architecture_support() -> Check:
@@ -57,7 +60,12 @@ def check_vllm_architecture_support() -> Check:
     Verified by architecture family rather than by loading weights, which needs
     a GPU. A model whose family is outside this set would need checking.
     """
-    supported = {"qwen", "llama", "mistral", "gemma"}
+    # olmo added 2026-10-15: VERIFIED by listing the installed package on the
+    # cluster -- vllm 0.11.2 ships model_executor/models/olmo2.py, so
+    # Olmo2ForCausalLM is supported on the glibc-2.28-pinned stack (ADR-0015).
+    # Checked against the wheel rather than assumed from release notes, the way
+    # ADR-0015 insists CUDA linkage be checked.
+    supported = {"qwen", "llama", "mistral", "gemma", "olmo"}
     families = {}
     for f in p("configs/models").glob("*.yaml"):
         if f.stem.startswith("_"):
@@ -299,9 +307,57 @@ def check_cross_split_ids() -> Check:
 
 
 def check_human_validation() -> Check:
-    return Check("human validation", BLOCKED,
-                 "NOT STARTED. No detector precision/recall/F1/AUPRC can be reported; "
-                 "D2 thresholds cannot be calibrated without dev-split human labels")
+    """REMOVED as a precondition by ADR-0023, not satisfied.
+
+    Until 2026-10-15 this reported BLOCKED, meaning "a precondition we cannot
+    verify here". It is now REMOVED: the design no longer has a human-validation
+    step, so there is no precondition left to block on.
+
+    The status is deliberately not PASS. Nothing was validated; the requirement
+    was withdrawn, and the consequences (no detector accuracy, ever) are
+    permanent rather than pending. Reporting PASS would say the opposite of what
+    happened.
+    """
+    return Check("human validation", REMOVED,
+                 "REMOVED FROM THE DESIGN by ADR-0023 (researcher decision "
+                 "2026-10-15, professor's permission). Not satisfied — withdrawn. "
+                 "Permanent consequences: no detector precision/recall/F1/AUPRC "
+                 "is estimable, and D2 reports a continuous score with NO "
+                 "threshold and no verdict (ADR-0023 D6). The IAA go/no-go "
+                 "criterion is removed; PROBE and D0AUDIT are superseded by "
+                 "PROBE-C and D0AUDIT-A")
+
+
+def check_probe_c() -> Check:
+    """PROBE-C, the machine-audited replacement for the human PROBE criterion."""
+    from semintegrity.benchmark.loader import load_split
+    from semintegrity.probes.pathology import audit as probe_audit
+    from semintegrity.utils.paths import data_path
+
+    directory = data_path("benchmark") / "test"
+    if not (directory / "constraints.jsonl").is_file():
+        return Check("PROBE-C probe construction", BLOCKED, "test split not built")
+    cons, probe_list = load_split(directory)
+    by: dict[str, list] = {}
+    for probe in probe_list:
+        by.setdefault(probe.constraint_id, []).append(probe)
+    findings, summary = probe_audit(cons, by)
+    cells = summary["by_factor_cell"].get("POLAR_CLOZE_STEM_EMBEDS_GOLD_ANSWER", {})
+    detail = (
+        f"{summary['n_probes']} probes loaded, so the three upstream guarantees "
+        f"(cloze blank, distinct surfaces, reachable expected answer) all hold. "
+        f"{len(findings)} probe(s) flagged POLAR_CLOZE_STEM_EMBEDS_GOLD_ANSWER, "
+        f"in factor cell(s) {cells}; effect BOUNDED by S4 at 0.002-0.007 paired "
+        "PSCR, one to two orders below H1_primary (Q33, RESULTS_STATUS 4b). "
+        "Audits the GENERATOR, not the generated meaning — NOT semantic validation"
+    )
+    # PASS, not BLOCKED, and the distinction matters. BLOCKED means "cannot be
+    # determined here"; this IS determined — the findings are counted and their
+    # effect measured. The criterion was revised on 2026-10-15 from "zero
+    # findings" to "findings quantified and bounded", because the benchmark is
+    # FROZEN and a finding cannot be fixed, only measured. The count travels in
+    # the detail, so PASS never reads as "nothing found".
+    return Check("PROBE-C probe construction", PASS, detail)
 
 
 def check_benchmark_authored() -> Check:
@@ -349,7 +405,8 @@ def main() -> int:
         check_immutability(), check_retry_and_timeout(),
         check_slurm_resources(), check_storage_headroom(),
         check_gpu_facts(), check_canon_gate(),
-        check_human_validation(), check_benchmark_authored(),
+        check_human_validation(),
+        check_probe_c(), check_benchmark_authored(),
         check_cross_split_ids(), check_corroboration_policy(),
     ]
     width = max(len(c.name) for c in checks)
@@ -362,9 +419,18 @@ def main() -> int:
     n_pass = sum(c.status == PASS for c in checks)
     n_fail = sum(c.status == FAIL for c in checks)
     n_blocked = sum(c.status == BLOCKED for c in checks)
+    n_removed = sum(c.status == REMOVED for c in checks)
     print("-" * (width + 60))
-    print(f"  {n_pass} PASS · {n_fail} FAIL · {n_blocked} BLOCKED")
+    tally = f"  {n_pass} PASS · {n_fail} FAIL · {n_blocked} BLOCKED"
+    if n_removed:
+        # Counted separately and never folded into PASS: a withdrawn
+        # precondition was not satisfied, it stopped existing (ADR-0023).
+        tally += f" · {n_removed} REMOVED"
+    print(tally)
     print()
+    if n_removed:
+        print("  REMOVED is not PASS: the requirement was withdrawn by ADR-0023, "
+              "not met.")
     if n_fail or n_blocked:
         print("  NOT READY for the full benchmark.")
         print("  BLOCKED is not PASS: an unverifiable precondition is not a satisfied one.")
